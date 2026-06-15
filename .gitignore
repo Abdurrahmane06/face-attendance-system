@@ -1,0 +1,45 @@
+# FaceAttend .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+*.whl
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
+# Node
+node_modules/
+frontend/dist/
+frontend/build/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Alembic
+*.sqlite3
+
+# Docker
+docker-data/
+
+# Logs
+*.log
+logs/

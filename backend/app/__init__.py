@@ -1,0 +1,1 @@
+"""FaceAttend backend application package."""

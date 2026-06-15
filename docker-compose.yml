@@ -1,0 +1,79 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: faceattend-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-faceattend}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-faceattend}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-faceattend} -d ${POSTGRES_DB:-faceattend}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: faceattend-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-faceattend}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-faceattend}
+      ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+    volumes:
+      - ./backend:/app
+      - uploads-data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: faceattend-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    env_file:
+      - .env
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    command: npm run dev -- --host 0.0.0.0
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: faceattend-pgadmin
+    restart: unless-stopped
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@faceattend.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+
+volumes:
+  postgres-data:
+  pgadmin-data:
+  uploads-data:

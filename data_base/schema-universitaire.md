@@ -480,14 +480,3 @@ NOT NULL (students.group_id);
 ```
 
 ---
-
-## 6. Améliorations par rapport à la proposition initiale
-
-| Proposition initiale | Version améliorée |
-|---|---|
-| 3 tables users (Étudiants, Enseignants, Admins) | 1 table `users` avec `role` + extensions `students` / `teachers` |
-| Pas de période académique | Table `academic_periods` |
-| Salle = champ texte | Table `rooms` |
-| Pointage cours / campus = tables séparées ou flou | `session_id NULLABLE` dans `attendance_records` |
-| Pas de `check_in` / `check_out` | Colonnes `check_in`, `check_out` avec contrainte |
-| Peu de contraintes d'intégrité | `UNIQUE`, `CHECK`, clés étrangères explicites |

@@ -1,18 +1,29 @@
-# Schéma de la Base de Données — FaceAttend (Contexte Universitaire)
+# Schéma Universel — FaceAttend (Entreprise, École, Université, Association)
 
-> Version améliorée avec les suggestions d'intégrité, périodes académiques, salles, et polymorphisme des pointages.
+> Version générique et adaptable. Une même base pour tout type d'organisation.
 
 ---
 
-## 1. Diagramme MCD (Modèle Conceptuel de Données)
+## 1. Diagramme MCD
 
 ```mermaid
 erDiagram
+    ORGANIZATIONS {
+        uuid id PK
+        string name
+        enum org_type "company | school | university | association"
+        string address
+        boolean is_active
+        datetime created_at
+    }
+
     USERS {
         uuid id PK
+        uuid organization_id FK
         string email UK
         string password_hash
-        enum role "student | teacher | admin"
+        enum user_type "employee | student | member | external"
+        enum auth_role "admin | manager | user"
         string full_name
         string phone
         boolean is_active
@@ -20,72 +31,70 @@ erDiagram
         datetime updated_at
     }
 
-    STUDENTS {
+    PROFILES {
         uuid id PK, FK
-        string student_number UK
+        enum profile_type "employee | student | teacher | intern"
+        string identifier UK
         date date_of_birth
         string address
         uuid group_id FK
     }
 
-    TEACHERS {
-        uuid id PK, FK
-        string employee_number UK
-        string specialty
-    }
-
-    DEPARTMENTS_SPECIALTIES {
+    ORGANIZATIONAL_UNITS {
         uuid id PK
+        uuid organization_id FK
+        uuid parent_id FK "NULLABLE"
         string name
         string code UK
-        text description
+        string description
     }
 
-    GROUPS_CLASSES {
+    GROUPS {
         uuid id PK
+        uuid unit_id FK
         string name
-        string level "L1 | L2 | L3 | M1 | M2"
-        uuid department_id FK
     }
 
-    ACADEMIC_PERIODS {
+    PERIODS {
         uuid id PK
-        string label "2024/2025 - S1"
+        uuid organization_id FK
+        string label
         date start_date
         date end_date
-        enum semester "S1 | S2"
+        enum period_type "semester | quarter | month | fiscal_year | custom"
     }
 
-    COURSES {
+    ACTIVITIES {
         uuid id PK
+        uuid organization_id FK
         string name
         string code UK
-        int credits
-        uuid teacher_id FK
-        uuid department_id FK
+        uuid responsible_id FK
+        uuid unit_id FK
     }
 
     ROOMS {
         uuid id PK
+        uuid organization_id FK
         string name UK
         string building
         int capacity
     }
 
-    CLASS_SESSIONS {
+    SESSIONS {
         uuid id PK
-        uuid course_id FK
+        uuid activity_id FK "NULLABLE"
         uuid group_id FK
         uuid room_id FK
-        uuid academic_period_id FK
+        uuid period_id FK
         datetime start_time
         datetime end_time
-        string type "CM | TD | TP"
+        enum session_type "class | meeting | shift | event | appointment"
     }
 
-    FACE_DATA {
+    FACE_ENCODINGS {
         uuid id PK
-        uuid student_id FK
+        uuid user_id FK
         text encoding
         string image_path
         datetime created_at
@@ -93,103 +102,111 @@ erDiagram
 
     ATTENDANCE_RECORDS {
         uuid id PK
-        uuid student_id FK
-        uuid session_id FK "NULLABLE → pointage campus"
+        uuid user_id FK
+        uuid session_id FK "NULLABLE"
+        uuid organization_id FK
         date record_date
         datetime check_in
         datetime check_out "NULLABLE"
-        enum method "FACE | MANUAL"
+        enum method "FACE | MANUAL | CARD | QR"
         text notes
         datetime created_at
     }
 
-    USERS ||--o| STUDENTS : ""
-    USERS ||--o| TEACHERS : ""
-    DEPARTMENTS_SPECIALTIES ||--o{ GROUPS_CLASSES : ""
-    GROUPS_CLASSES ||--o{ STUDENTS : ""
-    DEPARTMENTS_SPECIALTIES ||--o{ COURSES : ""
-    USERS ||--o{ COURSES : "enseignant responsable"
-    COURSES ||--o{ CLASS_SESSIONS : ""
-    GROUPS_CLASSES ||--o{ CLASS_SESSIONS : ""
-    ROOMS ||--o{ CLASS_SESSIONS : ""
-    ACADEMIC_PERIODS ||--o{ CLASS_SESSIONS : ""
-    STUDENTS ||--o{ FACE_DATA : ""
-    STUDENTS ||--o{ ATTENDANCE_RECORDS : ""
-    CLASS_SESSIONS ||--o{ ATTENDANCE_RECORDS : ""
+    ORGANIZATIONS ||--o{ USERS : ""
+    ORGANIZATIONS ||--o{ ORGANIZATIONAL_UNITS : ""
+    ORGANIZATIONS ||--o{ GROUPS : ""
+    ORGANIZATIONS ||--o{ PERIODS : ""
+    ORGANIZATIONS ||--o{ ACTIVITIES : ""
+    ORGANIZATIONS ||--o{ ROOMS : ""
+    ORGANIZATIONS ||--o{ ATTENDANCE_RECORDS : ""
+    USERS ||--o| PROFILES : ""
+    ORGANIZATIONAL_UNITS ||--o{ ORGANIZATIONAL_UNITS : "self-parent"
+    ORGANIZATIONAL_UNITS ||--o{ GROUPS : ""
+    ORGANIZATIONAL_UNITS ||--o{ ACTIVITIES : ""
+    GROUPS ||--o{ PROFILES : ""
+    GROUPS ||--o{ SESSIONS : ""
+    ACTIVITIES ||--o{ SESSIONS : ""
+    ROOMS ||--o{ SESSIONS : ""
+    PERIODS ||--o{ SESSIONS : ""
+    USERS ||--o{ FACE_ENCODINGS : ""
+    USERS ||--o{ ATTENDANCE_RECORDS : ""
+    SESSIONS ||--o{ ATTENDANCE_RECORDS : ""
 ```
 
 ---
 
-## 2. Diagramme de Classes (UML)
+## 2. Diagramme de Classes UML
 
 ```mermaid
 classDiagram
+    class Organization {
+        +UUID id
+        +String name
+        +OrgType type
+        +String address
+        +Boolean is_active
+        +addUser() User
+        +addUnit() OrganizationalUnit
+    }
+
     class User {
         +UUID id
         +String email
         +String password_hash
-        +Role role
+        +UserType user_type
+        +AuthRole auth_role
         +String full_name
         +String phone
         +Boolean is_active
         +DateTime created_at
-        +DateTime updated_at
         +login() Token
-        +has_permission(perm) bool
+        +has_permission() bool
     }
 
-    class Student {
+    class Profile {
         +UUID id
-        +String student_number
+        +ProfileType profile_type
+        +String identifier
         +Date date_of_birth
         +String address
-        +GroupClass group
-        +get_attendance_summary() dict
-        +get_face_encodings() List~FaceData~
+        +Group group
     }
 
-    class Teacher {
-        +UUID id
-        +String employee_number
-        +String specialty
-        +List~Course~ courses
-        +get_schedule() List~ClassSession~
-    }
-
-    class DepartmentSpecialty {
+    class OrganizationalUnit {
         +UUID id
         +String name
         +String code
         +String description
-        +List~GroupClass~ groups
-        +List~Course~ courses
+        +OrganizationalUnit parent
+        +List~OrganizationalUnit~ children
+        +List~Group~ groups
+        +List~Activity~ activities
     }
 
-    class GroupClass {
+    class Group {
         +UUID id
         +String name
-        +String level
-        +DepartmentSpecialty department
-        +List~Student~ students
-        +List~ClassSession~ sessions
+        +OrganizationalUnit unit
+        +List~Profile~ members
+        +List~Session~ sessions
     }
 
-    class AcademicPeriod {
+    class Period {
         +UUID id
         +String label
         +Date start_date
         +Date end_date
-        +Semester semester
+        +PeriodType type
     }
 
-    class Course {
+    class Activity {
         +UUID id
         +String name
         +String code
-        +Integer credits
-        +Teacher teacher
-        +DepartmentSpecialty department
-        +List~ClassSession~ sessions
+        +User responsible
+        +OrganizationalUnit unit
+        +List~Session~ sessions
     }
 
     class Room {
@@ -199,21 +216,21 @@ classDiagram
         +Integer capacity
     }
 
-    class ClassSession {
+    class Session {
         +UUID id
-        +Course course
-        +GroupClass group
+        +Activity activity
+        +Group group
         +Room room
-        +AcademicPeriod period
+        +Period period
         +DateTime start_time
         +DateTime end_time
         +SessionType type
         +List~AttendanceRecord~ records
     }
 
-    class FaceData {
+    class FaceEncoding {
         +UUID id
-        +Student student
+        +User user
         +String encoding
         +String image_path
         +DateTime created_at
@@ -221,8 +238,9 @@ classDiagram
 
     class AttendanceRecord {
         +UUID id
-        +Student student
-        +ClassSession session
+        +User user
+        +Session session
+        +Organization organization
         +Date record_date
         +DateTime check_in
         +DateTime check_out
@@ -231,252 +249,272 @@ classDiagram
         +DateTime created_at
     }
 
-    User <|-- Student : extends
-    User <|-- Teacher : extends
-    Student "1" --> "1" GroupClass : belongs to
-    GroupClass "*" --> "1" DepartmentSpecialty : belongs to
-    Course "*" --> "1" DepartmentSpecialty : belongs to
-    Course "*" --> "1" Teacher : taught by
-    ClassSession "*" --> "1" Course : concerns
-    ClassSession "*" --> "1" GroupClass : for
-    ClassSession "*" --> "1" Room : in
-    ClassSession "*" --> "1" AcademicPeriod : during
-    FaceData "*" --> "1" Student : belongs to
-    AttendanceRecord "*" --> "1" Student : concerns
-    AttendanceRecord "*" --> "0..1" ClassSession : linked to (nullable)
+    Organization "1" --> "*" User : has
+    Organization "1" --> "*" OrganizationalUnit : has
+    Organization "1" --> "*" Period : has
+    Organization "1" --> "*" Activity : has
+    Organization "1" --> "*" Room : has
+    Organization "1" --> "*" AttendanceRecord : owns
+    User "1" --> "0..1" Profile : has
+    User "1" --> "*" FaceEncoding : has
+    User "1" --> "*" AttendanceRecord : makes
+    OrganizationalUnit "*" --> "0..1" OrganizationalUnit : parent
+    OrganizationalUnit "1" --> "*" Group : contains
+    OrganizationalUnit "1" --> "*" Activity : offers
+    Group "1" --> "*" Profile : includes
+    Group "1" --> "*" Session : attends
+    Activity "1" --> "*" Session : schedules
+    Room "1" --> "*" Session : hosts
+    Period "1" --> "*" Session : frames
+    Session "1" --> "*" AttendanceRecord : generates
 ```
 
 ---
 
 ## 3. Dictionnaire des Tables
 
-### 3.1 `users` — Table unique d'authentification
+### 3.1 `organizations` — Organisations (multi-tenant)
 
-**Rôle :** Centralise l'authentification et les identités de toutes les personnes (étudiants, enseignants, administrateurs). C'est la porte d'entrée du système.
+**Rôle :** Point d'entrée du multi-tenant. Chaque organisation (entreprise, école, association) est isolée.
 
-**Pourquoi :** Au lieu d'avoir 3 tables séparées avec login/mot de passe (Étudiants, Enseignants, Admins), une seule table unifie l'auth, simplifie le code et évite la redondance. Un enseignant peut aussi être étudiant (doctorant) — un seul compte avec un profil `Teacher`.
-
-| Champ | Type | Contraintes | Description |
-|-------|------|-------------|-------------|
-| id | UUID | PK | Identifiant unique |
-| email | VARCHAR(255) | UNIQUE, NOT NULL | Email de connexion |
-| password_hash | VARCHAR(255) | NOT NULL | Hash bcrypt du mot de passe |
-| role | ENUM | `student`, `teacher`, `admin`, NOT NULL | Rôle dans le système |
-| full_name | VARCHAR(255) | NOT NULL | Nom complet |
-| phone | VARCHAR(20) | NULLABLE | Téléphone |
-| is_active | BOOLEAN | DEFAULT `true` | Soft-delete / désactivation |
-| created_at | TIMESTAMPTZ | DEFAULT `now()` | Date de création |
-| updated_at | TIMESTAMPTZ | DEFAULT `now()` | Date de modification |
-
----
-
-### 3.2 `students` — Profil étudiant (extension de `users`)
-
-**Rôle :** Contient les informations spécifiques aux étudiants (matricule, date de naissance, groupe d'affectation). Chaque étudiant est d'abord un `user` avec `role = 'student'`.
-
-**Pourquoi :** Les étudiants ont des champs que les enseignants et admins n'ont pas (matricule, groupe, date naissance). Une table séparée évite d'avoir des colonnes NULL chez les non-étudiants et permet de lier facilement les pointages et les données faciales.
+**Pourquoi :** Un seul déploiement peut servir plusieurs clients. Chaque organisation a ses propres utilisateurs, unités, salles, sessions.
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
-| id | UUID | PK, FK → `users.id` ON DELETE CASCADE | Référence au compte user |
-| student_number | VARCHAR(20) | UNIQUE, NOT NULL | Numéro matricule |
-| date_of_birth | DATE | NULLABLE | Date de naissance |
+| id | UUID | PK | |
+| name | VARCHAR(255) | NOT NULL | Nom de l'organisation |
+| type | ENUM | `company`, `school`, `university`, `association`, NOT NULL | Type |
 | address | TEXT | NULLABLE | Adresse |
-| group_id | UUID | FK → `groups_classes.id`, NOT NULL | Groupe/classe d'affectation |
+| is_active | BOOLEAN | DEFAULT `true` | |
+| created_at | TIMESTAMPTZ | DEFAULT `now()` | |
 
 ---
 
-### 3.3 `teachers` — Profil enseignant (extension de `users`)
+### 3.2 `users` — Utilisateurs (authentification unique)
 
-**Rôle :** Contient les informations spécifiques aux enseignants (numéro d'employé, spécialité). Chaque enseignant est d'abord un `user` avec `role = 'teacher'`.
+**Rôle :** Centralise l'authentification de toutes les personnes, quel que soit leur rôle.
 
-**Pourquoi :** Les enseignants sont responsables des cours et peuvent consulter les pointages de leurs séances. Ils n'ont pas besoin de groupe ni de matricule étudiant, mais ont un numéro d'employé et une spécialité. Cette séparation garde le modèle propre.
+**Pourquoi :** `user_type` dit *qui* (employé, étudiant, membre), `auth_role` dit *ce qu'il peut faire* (admin, manager, user). Séparation claire.
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
-| id | UUID | PK, FK → `users.id` ON DELETE CASCADE | Référence au compte user |
-| employee_number | VARCHAR(20) | UNIQUE, NOT NULL | Numéro d'employé |
-| specialty | VARCHAR(255) | NULLABLE | Spécialité / domaine |
+| id | UUID | PK | |
+| organization_id | UUID | FK → `organizations.id`, NOT NULL | Organisation de rattachement |
+| email | VARCHAR(255) | UNIQUE, NOT NULL | Email de connexion |
+| password_hash | VARCHAR(255) | NOT NULL | Hash bcrypt |
+| user_type | ENUM | `employee`, `student`, `member`, `external`, NOT NULL | Nature de la personne |
+| auth_role | ENUM | `admin`, `manager`, `user`, NOT NULL | Permission |
+| full_name | VARCHAR(255) | NOT NULL | |
+| phone | VARCHAR(20) | NULLABLE | |
+| is_active | BOOLEAN | DEFAULT `true` | |
+| created_at | TIMESTAMPTZ | DEFAULT `now()` | |
+| updated_at | TIMESTAMPTZ | DEFAULT `now()` | |
 
 ---
 
-### 3.4 `departments_specialties` — Filières / Départements
+### 3.3 `profiles` — Profils (extension de `users`)
 
-**Rôle :** Structure l'université en filières/départements (Informatique, Génie Civil, Médecine, etc.). Permet d'organiser les groupes, les cours et les étudiants par filière.
+**Rôle :** Porte les champs spécifiques selon le type de personne (matricule étudiant, numéro employé, date naissance).
 
-**Pourquoi :** Une université a plusieurs filières. Les rapports de présence par filière, les cours spécifiques à une filière, et l'organisation des groupes en dépendent. Sans cette table, on ne pourrait pas filtrer « tous les étudiants de la filière INFO ».
+**Pourquoi :** Une table unique au lieu de `students` + `teachers` séparés. Le `profile_type` fait la distinction.
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
-| id | UUID | PK | Identifiant unique |
-| name | VARCHAR(255) | NOT NULL | Nom (ex: Informatique, Génie Civil) |
-| code | VARCHAR(20) | UNIQUE, NOT NULL | Code court (ex: INFO, GC) |
-| description | TEXT | NULLABLE | Description optionnelle |
+| id | UUID | PK, FK → `users.id` ON DELETE CASCADE | |
+| profile_type | ENUM | `employee`, `student`, `teacher`, `intern`, NOT NULL | Type de profil |
+| identifier | VARCHAR(20) | UNIQUE, NOT NULL | Matricule étudiant / employé |
+| date_of_birth | DATE | NULLABLE | |
+| address | TEXT | NULLABLE | |
+| group_id | UUID | FK → `groups.id`, NOT NULL | Groupe d'affectation |
 
 ---
 
-### 3.5 `groups_classes` — Niveaux / Groupes
+### 3.4 `organizational_units` — Unités organisationnelles
 
-**Rôle :** Divise chaque filière en groupes pédagogiques (L2-INFO-A, L2-INFO-B, M1-GC, etc.). Un étudiant appartient à un seul groupe.
+**Rôle :** Structure hiérarchique (ex: Université → Faculté → Département, ou Entreprise → Direction → Service).
 
-**Pourquoi :** Les séances (cours) sont planifiées par groupe, pas par étudiant individuellement. Les pointages sont ensuite rattachés au groupe via la séance. Cette table permet de générer les emplois du temps et de filtrer les présences par groupe/classe.
+**Pourquoi :** Le `parent_id` permet une arborescence infinie. Filtrage des rapports par unité.
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
-| id | UUID | PK | Identifiant unique |
-| name | VARCHAR(255) | NOT NULL | Nom (ex: L2-INFO-A) |
-| level | ENUM | `L1`, `L2`, `L3`, `M1`, `M2`, NOT NULL | Niveau d'étude |
-| department_id | UUID | FK → `departments_specialties.id`, NOT NULL | Filière de rattachement |
+| id | UUID | PK | |
+| organization_id | UUID | FK → `organizations.id`, NOT NULL | |
+| parent_id | UUID | FK → `organizational_units.id`, NULLABLE | Unité parente |
+| name | VARCHAR(255) | NOT NULL | |
+| code | VARCHAR(20) | UNIQUE, NOT NULL | Code court |
+| description | TEXT | NULLABLE | |
 
 ---
 
-### 3.6 `academic_periods` — Périodes académiques (NOUVEAU)
+### 3.5 `groups` — Groupes
 
-**Rôle :** Définit les semestres et années universitaires (ex: « 2024/2025 - S1 »). Chaque séance de cours est rattachée à une période.
+**Rôle :** Regroupe les membres (ex: équipe projet, classe L2-INFO-A, département RH).
 
-**Pourquoi :** Sans cette table, on ne peut pas générer de rapports par semestre, archiver les données d'une année, ou vérifier qu'une séance se déroule dans une période valide. Essentiel pour le suivi longitudinal des étudiants.
+**Pourquoi :** Les sessions et les profils sont liés à un groupe. Simple et universel.
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
-| id | UUID | PK | Identifiant unique |
-| label | VARCHAR(100) | NOT NULL | Ex: « 2024/2025 - S1 » |
-| start_date | DATE | NOT NULL | Date de début |
-| end_date | DATE | NOT NULL | Date de fin |
-| semester | ENUM | `S1`, `S2`, NOT NULL | Semestre |
+| id | UUID | PK | |
+| unit_id | UUID | FK → `organizational_units.id`, NOT NULL | Unité de rattachement |
+| name | VARCHAR(255) | NOT NULL | Nom du groupe |
 
 ---
 
-### 3.7 `courses` — Matières / Cours
+### 3.6 `periods` — Périodes
 
-**Rôle :** Liste toutes les matières enseignées (Algèbre, Réseaux, Base de données, etc.). Chaque cours a un enseignant responsable et appartient à une filière.
+**Rôle :** Définit les intervalles de temps (semestre, trimestre, mois, année fiscale).
 
-**Pourquoi :** Les séances et les pointages sont organisés autour des cours. Cette table permet de savoir « combien d'heures d'INFO401 ont eu lieu », « quel enseignant est responsable », et « quels sont les cours de la filière INFO ». Elle porte aussi les crédits ECTS, utiles pour les relevés de notes.
+**Pourquoi :** Universel — une entreprise utilise des trimestres, une école des semestres.
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
-| id | UUID | PK | Identifiant unique |
-| name | VARCHAR(255) | NOT NULL | Nom du cours |
-| code | VARCHAR(20) | UNIQUE, NOT NULL | Code matière (ex: INFO401) |
-| credits | INTEGER | DEFAULT `0` | Nombre de crédits ECTS |
-| teacher_id | UUID | FK → `users.id`, NOT NULL | Enseignant responsable |
-| department_id | UUID | FK → `departments_specialties.id`, NOT NULL | Filière propriétaire du cours |
+| id | UUID | PK | |
+| organization_id | UUID | FK → `organizations.id`, NOT NULL | |
+| label | VARCHAR(100) | NOT NULL | Ex: « 2025-T1 », « S1 2024/2025 » |
+| start_date | DATE | NOT NULL | |
+| end_date | DATE | NOT NULL | |
+| period_type | ENUM | `semester`, `quarter`, `month`, `fiscal_year`, `custom`, NOT NULL | Type |
 
 ---
 
-### 3.8 `rooms` — Salles (NOUVEAU)
+### 3.7 `activities` — Activités
 
-**Rôle :** Référence toutes les salles de l'université (amphis, salles de TD, labos). Chaque séance de cours se déroule dans une salle spécifique.
+**Rôle :** Tout ce qui peut être planifié (cours, réunion, projet, shift).
 
-**Pourquoi :** Sans cette table, la salle n'est qu'un champ texte dans `class_sessions`, ce qui empêche de détecter les conflits d'occupation (deux cours dans la même salle au même moment). Elle permet aussi de filtrer les pointages par bâtiment ou de vérifier la capacité.
+**Pourquoi :** « Cours » n'existe pas en entreprise. « Activité » est universel.
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
-| id | UUID | PK | Identifiant unique |
-| name | VARCHAR(100) | UNIQUE, NOT NULL | Numéro/nom de salle |
+| id | UUID | PK | |
+| organization_id | UUID | FK → `organizations.id`, NOT NULL | |
+| name | VARCHAR(255) | NOT NULL | Nom |
+| code | VARCHAR(20) | UNIQUE, NOT NULL | Code |
+| responsible_id | UUID | FK → `users.id`, NOT NULL | Responsable |
+| unit_id | UUID | FK → `organizational_units.id`, NOT NULL | Unité propriétaire |
+
+---
+
+### 3.8 `rooms` — Salles / Lieux
+
+**Rôle :** Lieux physiques (salle de classe, bureau, amphithéâtre, salle de réunion).
+
+**Pourquoi :** Indispensable pour éviter les conflits d'occupation.
+
+| Champ | Type | Contraintes | Description |
+|-------|------|-------------|-------------|
+| id | UUID | PK | |
+| organization_id | UUID | FK → `organizations.id`, NOT NULL | |
+| name | VARCHAR(100) | UNIQUE, NOT NULL | |
 | building | VARCHAR(100) | NULLABLE | Bâtiment |
-| capacity | INTEGER | DEFAULT `0` | Capacité maximale |
+| capacity | INTEGER | DEFAULT `0` | |
 
 ---
 
-### 3.9 `class_sessions` — Séances (Emploi du temps)
+### 3.9 `sessions` — Sessions (planning)
 
-**Rôle :** C'est **le planning** — chaque ligne représente une séance réelle ou prévue (ex: « Cours d'Algèbre du groupe L2-INFO-A, le lundi 8h-10h en Amphi 3, Semestre 1 »).
+**Rôle :** Chaque ligne = un événement planifié (cours, réunion, shift, événement).
 
-**Pourquoi :** C'est la table pivot entre les cours, les groupes, les salles et les périodes. Les pointages par cours sont liés à une séance spécifique. Sans elle, on ne pourrait pas savoir à quel cours correspond un pointage, ni générer l'emploi du temps. C'est également elle qui permet de détecter les absences : si une séance a eu lieu mais qu'un étudiant n'a pas pointé, on peut le marquer absent automatiquement.
+**Pourquoi :** Pivot entre activité, groupe, salle, période. Le `activity_id` est NULLABLE pour les sessions sans activité (ex: événement général).
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
-| id | UUID | PK | Identifiant unique |
-| course_id | UUID | FK → `courses.id`, NOT NULL | Matière concernée |
-| group_id | UUID | FK → `groups_classes.id`, NOT NULL | Groupe concerné |
-| room_id | UUID | FK → `rooms.id`, NOT NULL | Salle |
-| academic_period_id | UUID | FK → `academic_periods.id`, NOT NULL | Période académique |
-| start_time | TIMESTAMPTZ | NOT NULL | Début du cours |
-| end_time | TIMESTAMPTZ | NOT NULL, CHECK(end_time > start_time) | Fin du cours |
-| type | ENUM | `CM`, `TD`, `TP`, NOT NULL | Type de séance |
+| id | UUID | PK | |
+| activity_id | UUID | FK → `activities.id`, NULLABLE | NULL si événement général |
+| group_id | UUID | FK → `groups.id`, NOT NULL | Groupe concerné |
+| room_id | UUID | FK → `rooms.id`, NOT NULL | |
+| period_id | UUID | FK → `periods.id`, NOT NULL | |
+| start_time | TIMESTAMPTZ | NOT NULL | |
+| end_time | TIMESTAMPTZ | NOT NULL, CHECK(end_time > start_time) | |
+| session_type | ENUM | `class`, `meeting`, `shift`, `event`, `appointment`, NOT NULL | Type |
 
 ---
 
-### 3.10 `face_data` — Données biométriques
+### 3.10 `face_encodings` — Données faciales
 
-**Rôle :** Stocke les encodages faciaux (vecteurs de 128 floats) extraits des photos des étudiants, utilisés par le modèle de reconnaissance faciale pour identifier qui pointe.
+**Rôle :** Encodages biométriques pour la reconnaissance faciale.
 
-**Pourquoi :** Le système de reconnaissance a besoin de références biométriques pour comparer et identifier un visage. Chaque étudiant peut avoir plusieurs encodages (différents angles, différentes photos) pour améliorer la précision. C'est le cœur du système « sans contact » — sans cette table, pas de reconnaissance possible. Les données sont stockées sous forme de texte JSON pour être facilement chargées en mémoire par la bibliothèque `face_recognition`.
+**Pourquoi :** Lié à `users` et non à `profiles` — un enseignant ou un admin peut aussi utiliser la reconnaissance.
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
-| id | UUID | PK | Identifiant unique |
-| student_id | UUID | FK → `students.id` ON DELETE CASCADE, NOT NULL | Étudiant concerné |
-| encoding | TEXT | NOT NULL | Encodage facial (JSON array 128 floats) |
-| image_path | VARCHAR(500) | NULLABLE | Chemin de l'image source |
-| created_at | TIMESTAMPTZ | DEFAULT `now()` | Date d'enregistrement |
+| id | UUID | PK | |
+| user_id | UUID | FK → `users.id` ON DELETE CASCADE, NOT NULL | |
+| encoding | TEXT | NOT NULL | JSON array 128 floats |
+| image_path | VARCHAR(500) | NULLABLE | |
+| created_at | TIMESTAMPTZ | DEFAULT `now()` | |
 
 ---
 
 ### 3.11 `attendance_records` — Pointages (table centrale)
 
-**Rôle :** Table la **plus importante** du système. Chaque ligne représente une détection de présence par reconnaissance faciale, que ce soit pour un cours spécifique (lié à une séance) ou pour une entrée/sortie générale du campus.
+**Rôle :** Enregistre chaque présence (cours, réunion, entrée/sortie).
 
-**Pourquoi :** C'est elle qui répond à la question « l'étudiant X était-il présent au cours Y ? » ou « l'étudiant X est-il sur le campus aujourd'hui ? ». Elle est conçue pour être **polymorphe** : si `session_id` est renseigné → pointage de cours ; si `session_id` est NULL → pointage campus. Les contraintes d'unicité empêchent les doublons (un étudiant ne peut pas pointer deux fois la même séance ou avoir deux entrées campus le même jour). Le `check_out` permet de mesurer la durée de présence sur le campus.
+**Pourquoi :** Table centrale. `session_id` NULL = pointage libre (entrée/sortie). Renseigné = pointage lié à un événement. Lié à `users` pour être universel.
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
-| id | UUID | PK | Identifiant unique |
-| student_id | UUID | FK → `students.id` ON DELETE CASCADE, NOT NULL | Étudiant pointé |
-| session_id | UUID | FK → `class_sessions.id`, **NULLABLE** | NULL = pointage campus, renseigné = pointage cours |
-| record_date | DATE | NOT NULL | Date du pointage |
-| check_in | TIMESTAMPTZ | NOT NULL | Heure d'arrivée |
-| check_out | TIMESTAMPTZ | NULLABLE | Heure de départ (pour campus) |
-| method | ENUM | `FACE`, `MANUAL`, NOT NULL | Méthode de reconnaissance |
-| notes | TEXT | NULLABLE | Notes optionnelles |
-| created_at | TIMESTAMPTZ | DEFAULT `now()` | Date de création |
+| id | UUID | PK | |
+| user_id | UUID | FK → `users.id` ON DELETE CASCADE, NOT NULL | Personne pointée |
+| session_id | UUID | FK → `sessions.id`, NULLABLE | NULL = libre, renseigné = événement |
+| organization_id | UUID | FK → `organizations.id`, NOT NULL | |
+| record_date | DATE | NOT NULL | |
+| check_in | TIMESTAMPTZ | NOT NULL | |
+| check_out | TIMESTAMPTZ | NULLABLE | |
+| method | ENUM | `FACE`, `MANUAL`, `CARD`, `QR`, NOT NULL | Méthode |
+| notes | TEXT | NULLABLE | |
+| created_at | TIMESTAMPTZ | DEFAULT `now()` | |
 
 **Contraintes :**
-- `UNIQUE(student_id, session_id)` — pas de doublon par séance
-- `UNIQUE(student_id, record_date)` — 1 seul pointage campus par jour
+- `UNIQUE(user_id, session_id)` — pas de doublon par session
+- `UNIQUE(user_id, record_date)` — 1 seul pointage libre par jour
 - `CHECK(check_out IS NULL OR check_out > check_in)`
-- `CHECK(session_id IS NOT NULL OR ...)` — au moins un contexte défini
 
 ---
 
-## 4. Résumé des relations
+## 4. Correspondance : Ancien (Universitaire) → Nouveau (Universel)
 
-```
-users (role=student) ── 1:1 ── students ── 1:N ── face_data
-                                          ── 1:N ── attendance_records
-                                                    |
-                                                    └── 0:1 ── class_sessions
-
-users (role=teacher) ── 1:1 ── teachers ── 1:N ── courses
-
-departments_specialties ── 1:N ── groups_classes ── 1:N ── students
-                        ── 1:N ── courses
-
-academic_periods ── 1:N ── class_sessions ── 1:N ── attendance_records
-courses ── 1:N ── class_sessions
-groups_classes ── 1:N ── class_sessions
-rooms ── 1:N ── class_sessions
-```
+| Universitaire (v1) | Universel (v2) | Pourquoi |
+|---|---|---|
+| — | `organizations` | Multi-tenant |
+| `users.role = student/teacher/admin` | `users.user_type` + `users.auth_role` | Qui vs permissions |
+| `students` + `teachers` | `profiles` avec `profile_type` | 1 table au lieu de 2 |
+| `departments_specialties` | `organizational_units` avec `parent_id` | Hiérarchie infinie |
+| `groups_classes` + `level` | `groups` | Plus de niveau figé |
+| `academic_periods` + `semester` | `periods` avec `period_type` | Trimestre, mois, année fiscale |
+| `courses` + `credits` | `activities` | Universel |
+| `rooms` | `rooms` + `organization_id` | Multi-tenant |
+| `class_sessions` + `CM/TD/TP` | `sessions` + `session_type` | Meeting, shift, event |
+| `face_data` → lié à `students` | `face_encodings` → lié à `users` | Tout le monde peut utiliser la RF |
+| `attendance_records` → lié à `students` | `attendance_records` → lié à `users` | Employés aussi |
 
 ---
 
-## 5. Contraintes d'intégrité clés
+## 5. Contraintes d'intégrité
 
 ```sql
--- Pas de doublon de pointage par séance pour un étudiant
-UNIQUE (student_id, session_id);
-
--- Pas de doublon de pointage campus par jour
-UNIQUE (student_id, record_date) WHERE session_id IS NULL;
-
+-- Isolation multi-tenant (toutes les tables ont organization_id)
+-- Pas de doublon par session
+UNIQUE (user_id, session_id);
+-- Pas de doublon de pointage libre par jour
+UNIQUE (user_id, record_date) WHERE session_id IS NULL;
 -- Cohérence temporelle
 CHECK (check_out IS NULL OR check_out > check_in);
-
--- Horaires de séance cohérents
+-- Horaires cohérents
 CHECK (end_time > start_time);
-
--- Un étudiant appartient forcément à un groupe
-NOT NULL (students.group_id);
+-- Hiérarchie: une unité ne peut pas être son propre parent
+CHECK (parent_id != id);
 ```
 
 ---
+
+## 6. Cas d'usage concrets
+
+| Organisation | `user_type` | `activity` | `session_type` |
+|---|---|---|---|
+| **Université** | student, teacher | Algèbre, Réseaux | class |
+| **Entreprise** | employee | Réunion d'équipe, Shift de prod | meeting, shift |
+| **École primaire** | student, teacher | Math, Français | class |
+| **Association** | member | Assemblée générale, Atelier | event, meeting |
+| **Hôpital** | employee, external | Garde A, Staff | shift, meeting |
+
+Le **moteur de pointage** (reconnaissance faciale → écriture dans `attendance_records`) est **exactement le même** pour tous ces cas. Seule la configuration des activités et des sessions change.

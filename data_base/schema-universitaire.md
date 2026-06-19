@@ -252,6 +252,10 @@ classDiagram
 
 ### 3.1 `users` — Table unique d'authentification
 
+**Rôle :** Centralise l'authentification et les identités de toutes les personnes (étudiants, enseignants, administrateurs). C'est la porte d'entrée du système.
+
+**Pourquoi :** Au lieu d'avoir 3 tables séparées avec login/mot de passe (Étudiants, Enseignants, Admins), une seule table unifie l'auth, simplifie le code et évite la redondance. Un enseignant peut aussi être étudiant (doctorant) — un seul compte avec un profil `Teacher`.
+
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
 | id | UUID | PK | Identifiant unique |
@@ -264,11 +268,13 @@ classDiagram
 | created_at | TIMESTAMPTZ | DEFAULT `now()` | Date de création |
 | updated_at | TIMESTAMPTZ | DEFAULT `now()` | Date de modification |
 
-> **Pourquoi une table unique ?** Évite la duplication login/mdp/auth sur 3 tables. Un `admin` n'a pas de profil étudiant ni enseignant. Un `teacher` peut aussi être `student` (doctorant) — un seul compte avec un profil `Teacher`.
-
 ---
 
 ### 3.2 `students` — Profil étudiant (extension de `users`)
+
+**Rôle :** Contient les informations spécifiques aux étudiants (matricule, date de naissance, groupe d'affectation). Chaque étudiant est d'abord un `user` avec `role = 'student'`.
+
+**Pourquoi :** Les étudiants ont des champs que les enseignants et admins n'ont pas (matricule, groupe, date naissance). Une table séparée évite d'avoir des colonnes NULL chez les non-étudiants et permet de lier facilement les pointages et les données faciales.
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
@@ -282,6 +288,10 @@ classDiagram
 
 ### 3.3 `teachers` — Profil enseignant (extension de `users`)
 
+**Rôle :** Contient les informations spécifiques aux enseignants (numéro d'employé, spécialité). Chaque enseignant est d'abord un `user` avec `role = 'teacher'`.
+
+**Pourquoi :** Les enseignants sont responsables des cours et peuvent consulter les pointages de leurs séances. Ils n'ont pas besoin de groupe ni de matricule étudiant, mais ont un numéro d'employé et une spécialité. Cette séparation garde le modèle propre.
+
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
 | id | UUID | PK, FK → `users.id` ON DELETE CASCADE | Référence au compte user |
@@ -291,6 +301,10 @@ classDiagram
 ---
 
 ### 3.4 `departments_specialties` — Filières / Départements
+
+**Rôle :** Structure l'université en filières/départements (Informatique, Génie Civil, Médecine, etc.). Permet d'organiser les groupes, les cours et les étudiants par filière.
+
+**Pourquoi :** Une université a plusieurs filières. Les rapports de présence par filière, les cours spécifiques à une filière, et l'organisation des groupes en dépendent. Sans cette table, on ne pourrait pas filtrer « tous les étudiants de la filière INFO ».
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
@@ -303,6 +317,10 @@ classDiagram
 
 ### 3.5 `groups_classes` — Niveaux / Groupes
 
+**Rôle :** Divise chaque filière en groupes pédagogiques (L2-INFO-A, L2-INFO-B, M1-GC, etc.). Un étudiant appartient à un seul groupe.
+
+**Pourquoi :** Les séances (cours) sont planifiées par groupe, pas par étudiant individuellement. Les pointages sont ensuite rattachés au groupe via la séance. Cette table permet de générer les emplois du temps et de filtrer les présences par groupe/classe.
+
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
 | id | UUID | PK | Identifiant unique |
@@ -314,6 +332,10 @@ classDiagram
 
 ### 3.6 `academic_periods` — Périodes académiques (NOUVEAU)
 
+**Rôle :** Définit les semestres et années universitaires (ex: « 2024/2025 - S1 »). Chaque séance de cours est rattachée à une période.
+
+**Pourquoi :** Sans cette table, on ne peut pas générer de rapports par semestre, archiver les données d'une année, ou vérifier qu'une séance se déroule dans une période valide. Essentiel pour le suivi longitudinal des étudiants.
+
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
 | id | UUID | PK | Identifiant unique |
@@ -322,11 +344,13 @@ classDiagram
 | end_date | DATE | NOT NULL | Date de fin |
 | semester | ENUM | `S1`, `S2`, NOT NULL | Semestre |
 
-> **Utilité :** permet les rapports par semestre, l'archivage, et de savoir si une séance appartient à une période valide.
-
 ---
 
 ### 3.7 `courses` — Matières / Cours
+
+**Rôle :** Liste toutes les matières enseignées (Algèbre, Réseaux, Base de données, etc.). Chaque cours a un enseignant responsable et appartient à une filière.
+
+**Pourquoi :** Les séances et les pointages sont organisés autour des cours. Cette table permet de savoir « combien d'heures d'INFO401 ont eu lieu », « quel enseignant est responsable », et « quels sont les cours de la filière INFO ». Elle porte aussi les crédits ECTS, utiles pour les relevés de notes.
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
@@ -341,6 +365,10 @@ classDiagram
 
 ### 3.8 `rooms` — Salles (NOUVEAU)
 
+**Rôle :** Référence toutes les salles de l'université (amphis, salles de TD, labos). Chaque séance de cours se déroule dans une salle spécifique.
+
+**Pourquoi :** Sans cette table, la salle n'est qu'un champ texte dans `class_sessions`, ce qui empêche de détecter les conflits d'occupation (deux cours dans la même salle au même moment). Elle permet aussi de filtrer les pointages par bâtiment ou de vérifier la capacité.
+
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
 | id | UUID | PK | Identifiant unique |
@@ -351,6 +379,10 @@ classDiagram
 ---
 
 ### 3.9 `class_sessions` — Séances (Emploi du temps)
+
+**Rôle :** C'est **le planning** — chaque ligne représente une séance réelle ou prévue (ex: « Cours d'Algèbre du groupe L2-INFO-A, le lundi 8h-10h en Amphi 3, Semestre 1 »).
+
+**Pourquoi :** C'est la table pivot entre les cours, les groupes, les salles et les périodes. Les pointages par cours sont liés à une séance spécifique. Sans elle, on ne pourrait pas savoir à quel cours correspond un pointage, ni générer l'emploi du temps. C'est également elle qui permet de détecter les absences : si une séance a eu lieu mais qu'un étudiant n'a pas pointé, on peut le marquer absent automatiquement.
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
@@ -367,6 +399,10 @@ classDiagram
 
 ### 3.10 `face_data` — Données biométriques
 
+**Rôle :** Stocke les encodages faciaux (vecteurs de 128 floats) extraits des photos des étudiants, utilisés par le modèle de reconnaissance faciale pour identifier qui pointe.
+
+**Pourquoi :** Le système de reconnaissance a besoin de références biométriques pour comparer et identifier un visage. Chaque étudiant peut avoir plusieurs encodages (différents angles, différentes photos) pour améliorer la précision. C'est le cœur du système « sans contact » — sans cette table, pas de reconnaissance possible. Les données sont stockées sous forme de texte JSON pour être facilement chargées en mémoire par la bibliothèque `face_recognition`.
+
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
 | id | UUID | PK | Identifiant unique |
@@ -375,11 +411,13 @@ classDiagram
 | image_path | VARCHAR(500) | NULLABLE | Chemin de l'image source |
 | created_at | TIMESTAMPTZ | DEFAULT `now()` | Date d'enregistrement |
 
-> **Relation :** 1 étudiant → N encodages (plusieurs photos/angles).
-
 ---
 
 ### 3.11 `attendance_records` — Pointages (table centrale)
+
+**Rôle :** Table la **plus importante** du système. Chaque ligne représente une détection de présence par reconnaissance faciale, que ce soit pour un cours spécifique (lié à une séance) ou pour une entrée/sortie générale du campus.
+
+**Pourquoi :** C'est elle qui répond à la question « l'étudiant X était-il présent au cours Y ? » ou « l'étudiant X est-il sur le campus aujourd'hui ? ». Elle est conçue pour être **polymorphe** : si `session_id` est renseigné → pointage de cours ; si `session_id` est NULL → pointage campus. Les contraintes d'unicité empêchent les doublons (un étudiant ne peut pas pointer deux fois la même séance ou avoir deux entrées campus le même jour). Le `check_out` permet de mesurer la durée de présence sur le campus.
 
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
@@ -398,8 +436,6 @@ classDiagram
 - `UNIQUE(student_id, record_date)` — 1 seul pointage campus par jour
 - `CHECK(check_out IS NULL OR check_out > check_in)`
 - `CHECK(session_id IS NOT NULL OR ...)` — au moins un contexte défini
-
-> **Polymorphisme du pointage :** une même table gère les deux contextes. Si `session_id` est NULL → c'est une entrée/sortie campus. Sinon → c'est un pointage de cours.
 
 ---
 

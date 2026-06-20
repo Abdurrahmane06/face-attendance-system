@@ -1,6 +1,6 @@
 # Schéma — Modèle de reconnaissance faciale dédié à la gestion du pointage et de la présence
 
-> Version ciblée et enrichie. 9 tables, zéro multi-tenant, zéro hiérarchie.
+> Version ciblée et enrichie. 7 tables, zéro multi-tenant, zéro hiérarchie.
 
 ---
 
@@ -20,19 +20,6 @@ erDiagram
         boolean is_active
         datetime created_at
         datetime updated_at
-    }
-
-    GROUPS {
-        uuid id PK
-        string name
-        string description "NULLABLE"
-        boolean is_active
-        datetime created_at
-    }
-
-    USER_GROUPS {
-        uuid user_id FK
-        uuid group_id FK
     }
 
     SESSIONS {
@@ -100,8 +87,6 @@ erDiagram
     USERS ||--o{ ATTENDANCE_RECORDS : ""
     USERS ||--o{ AUDIT_LOGS : ""
     USERS ||--o{ REFRESH_TOKENS : ""
-    USERS ||--o{ USER_GROUPS : ""
-    GROUPS ||--o{ USER_GROUPS : ""
     SESSIONS ||--o{ ATTENDANCE_RECORDS : ""
     FACE_IMAGES ||--o{ FACE_ENCODINGS : ""
 ```
@@ -120,7 +105,7 @@ Table centrale du système. Chaque ligne représente une personne physique qui i
 **Pourquoi cette table ?**
 - Un point d'authentification unique pour tout le monde. Au lieu d'avoir une table `students`, une table `teachers` et une table `admins` avec chacune leur système d'auth, on centralise tout ici.
 - `profile_type` distingue la *nature* de la personne (étudiant, employé, enseignant, admin)
-- `auth_role` distingue les *permissions* (admin = accès total, manager = gestion des groupes/sessions, user = pointage uniquement)
+- `auth_role` distingue les *permissions* (admin = accès total, manager = gestion des sessions, user = pointage uniquement)
 - Ces deux champs sont indépendants : un étudiant peut être `auth_role = admin` (délégué qui gère le système)
 
 **Fusion avec l'ancienne table `profiles` :**
@@ -142,52 +127,7 @@ Les champs spécifiques (matricule, téléphone) sont directement dans `users` p
 
 ---
 
-### 2.2 `groups` — Groupes
-
-**Rôle :** Regroupe les utilisateurs (classe, équipe, département) pour filtrer les rapports de pointage.
-
-**Description détaillée :**
-Permet d'organiser les utilisateurs en ensembles logiques. Dans une université, un groupe = une classe (ex: « L2-INFO-A »). Dans une entreprise, un groupe = une équipe ou un département (ex: « Équipe DevOps », « Service RH »).
-
-**Pourquoi cette table ?**
-- Sans groupe, les rapports de pointage sont individuels. Avec les groupes, on peut répondre à « Qui était présent en L2-INFO-A aujourd'hui ? »
-- Un utilisateur peut appartenir à plusieurs groupes (ex: un étudiant en L2-INFO-A et au club de robotique) — géré via la table `user_groups`
-- `is_active` permet de désactiver un groupe sans supprimer l'historique
-- La table est intentionnellement simple (nom + description) pour rester flexible
-
-| Champ | Type | Contraintes | Description |
-|-------|------|-------------|-------------|
-| id | UUID | PK | |
-| name | VARCHAR(255) | NOT NULL | Nom du groupe (ex: « L2-INFO-A », « Équipe DevOps ») |
-| description | TEXT | NULLABLE | |
-| is_active | BOOLEAN | DEFAULT `true` | Soft-delete |
-| created_at | TIMESTAMPTZ | DEFAULT `now()` | |
-
----
-
-### 2.3 `user_groups` — Appartenance aux groupes
-
-**Rôle :** Association many-to-many entre utilisateurs et groupes.
-
-**Description détaillée :**
-Table de jonction qui relie `users` à `groups`. Un utilisateur peut être dans plusieurs groupes, et un groupe contient plusieurs utilisateurs.
-
-**Pourquoi cette table ?**
-- Relation many-to-many : un étudiant suit plusieurs matières (donc plusieurs groupes), une classe contient plusieurs étudiants
-- La clé primaire composite `(user_id, group_id)` garantit qu'un utilisateur ne peut pas être ajouté deux fois au même groupe
-- `ON DELETE CASCADE` sur les deux FK : si un utilisateur ou un groupe est supprimé, les associations sont automatiquement nettoyées
-
-| Champ | Type | Contraintes | Description |
-|-------|------|-------------|-------------|
-| user_id | UUID | FK → `users.id` ON DELETE CASCADE, NOT NULL | |
-| group_id | UUID | FK → `groups.id` ON DELETE CASCADE, NOT NULL | |
-
-**Contraintes :**
-- `PRIMARY KEY(user_id, group_id)`
-
----
-
-### 2.4 `sessions` — Sessions (planning)
+### 2.2 `sessions` — Sessions (planning)
 
 **Rôle :** Événements planifiés auxquels les utilisateurs peuvent pointer (cours, réunion, shift).
 
@@ -218,7 +158,7 @@ Chaque ligne représente un créneau planifié : un cours d'Algèbre le lundi de
 
 ---
 
-### 2.5 `face_images` — Images brutes
+### 2.3 `face_images` — Images brutes
 
 **Rôle :** Photos originales des utilisateurs, utilisées pour générer les encodages faciaux et pour l'affichage.
 
@@ -244,7 +184,7 @@ Stocke les chemins vers les photos des utilisateurs. Ces images sont la matière
 
 ---
 
-### 2.6 `face_encodings` — Encodages faciaux
+### 2.4 `face_encodings` — Encodages faciaux
 
 **Rôle :** Vecteurs biométriques extraits des images pour la reconnaissance faciale.
 
@@ -280,7 +220,7 @@ C'est le cœur technique du système. Chaque ligne contient un vecteur mathémat
 
 ---
 
-### 2.7 `attendance_records` — Pointages (table centrale)
+### 2.5 `attendance_records` — Pointages (table centrale)
 
 **Rôle :** Table la plus importante. Chaque ligne représente une détection de présence.
 
@@ -322,7 +262,7 @@ Le point d'arrivée de tout le système. Quand la reconnaissance faciale identif
 
 ---
 
-### 2.8 `audit_logs` — Journal d'audit
+### 2.6 `audit_logs` — Journal d'audit
 
 **Rôle :** Trace toutes les actions importantes (connexion, création/suppression d'utilisateur, modification de pointage).
 
@@ -355,7 +295,7 @@ Table d'historisation. Chaque ligne représente une action effectuée par un uti
 
 ---
 
-### 2.9 `refresh_tokens` — Tokens de rafraîchissement
+### 2.7 `refresh_tokens` — Tokens de rafraîchissement
 
 **Rôle :** Gestion des sessions API (JWT refresh tokens) pour l'authentification sans mot de passe répété.
 
@@ -399,6 +339,8 @@ Lorsqu'un utilisateur se connecte, l'API délivre deux tokens JWT : un access to
 | `periods` | Les sessions ont des dates de début/fin explicites, pas besoin de période agrégée. |
 | `activities` | Simplifié : une session a un titre, pas besoin d'une table activité séparée. |
 | `rooms` | Non nécessaire pour le pointage. Peut être un champ texte dans `sessions` si besoin. |
+| `groups` | Pas besoin de regroupement (classe/équipe) pour l'import admin. Pointages individuels uniquement. |
+| `user_groups` | Table de jonction devenue inutile après la suppression de `groups`. |
 
 ---
 
@@ -454,8 +396,5 @@ CHECK (check_out IS NULL OR check_out > check_in);
 CHECK (end_time > start_time);
 
 -- ========== SOFT-DELETE ==========
--- is_active présent sur : users, groups
-
--- ========== CLÉS COMPOSÉES ==========
--- PRIMARY KEY (user_id, group_id) dans user_groups
+-- is_active présent sur : users
 ```

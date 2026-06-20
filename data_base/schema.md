@@ -1,6 +1,6 @@
 # Schéma — Modèle de reconnaissance faciale dédié à la gestion du pointage et de la présence
 
-> Version ciblée et enrichie. 7 tables, zéro multi-tenant, zéro hiérarchie.
+> Version ciblée et enrichie. 9 tables, zéro multi-tenant, zéro hiérarchie.
 
 ---
 
@@ -24,11 +24,24 @@ erDiagram
 
     SESSIONS {
         uuid id PK
+        uuid group_id FK "NULLABLE"
         string title
         datetime start_time
         datetime end_time
         string notes "NULLABLE"
         datetime created_at
+    }
+
+    GROUPS {
+        uuid id PK
+        string name
+        string description "NULLABLE"
+        datetime created_at
+    }
+
+    USER_GROUPS {
+        uuid user_id FK
+        uuid group_id FK
     }
 
     FACE_IMAGES {
@@ -87,6 +100,9 @@ erDiagram
     USERS ||--o{ ATTENDANCE_RECORDS : ""
     USERS ||--o{ AUDIT_LOGS : ""
     USERS ||--o{ REFRESH_TOKENS : ""
+    USERS ||--o{ USER_GROUPS : ""
+    GROUPS ||--o{ USER_GROUPS : ""
+    GROUPS ||--o{ SESSIONS : ""
     SESSIONS ||--o{ ATTENDANCE_RECORDS : ""
     FACE_IMAGES ||--o{ FACE_ENCODINGS : ""
 ```
@@ -137,6 +153,7 @@ Chaque ligne représente un créneau planifié : un cours d'Algèbre le lundi de
 **Pourquoi cette table ?**
 - Permet de répondre à « Qui était présent au cours d'Algèbre du 10 mars ? » — le pointage est rattaché à un événement précis
 - `session_id` NULLABLE dans `attendance_records` : si NULL, c'est un pointage libre (entrée/sortie du campus), si renseigné, c'est un pointage lié à un événement
+- `group_id` NULLABLE lie la session à un groupe : seuls les membres de ce groupe peuvent pointer via QR (vérification backend)
 - Pas de dépendance à une table `activities` ou `rooms` : le titre décrit l'événement, la salle peut être mentionnée dans `notes`
 
 **Tables supprimées et remplacées :**
@@ -147,6 +164,7 @@ Chaque ligne représente un créneau planifié : un cours d'Algèbre le lundi de
 | Champ | Type | Contraintes | Description |
 |-------|------|-------------|-------------|
 | id | UUID | PK | |
+| group_id | UUID | FK → `groups.id` ON DELETE SET NULL, NULLABLE | Groupe restreint pouvant pointer à cette session |
 | title | VARCHAR(255) | NOT NULL | Intitulé (ex: « Cours Algèbre », « Réunion d'équipe ») |
 | start_time | TIMESTAMPTZ | NOT NULL | Début |
 | end_time | TIMESTAMPTZ | NOT NULL, CHECK(end_time > start_time) | Fin |
@@ -155,6 +173,7 @@ Chaque ligne représente un créneau planifié : un cours d'Algèbre le lundi de
 
 **Index :**
 - `INDEX(start_time, end_time)`
+- `INDEX(group_id)`
 
 ---
 
@@ -329,6 +348,52 @@ Lorsqu'un utilisateur se connecte, l'API délivre deux tokens JWT : un access to
 
 ---
 
+### 2.8 `groups` — Groupes d'utilisateurs
+
+**Rôle :** Regroupement logique d'utilisateurs (classe, équipe, département).
+
+**Description détaillée :**
+Chaque ligne représente un groupe auquel des utilisateurs peuvent appartenir. Un groupe peut être lié à une session via `group_id` pour restreindre le pointage QR aux seuls membres de ce groupe.
+
+**Pourquoi cette table ?**
+- Permet de créer des groupes (ex: « Groupe A », « Équipe Marketing », « Shift Nuit »)
+- Liée à `sessions.group_id` : un QR généré pour une session liée à un groupe — seuls les membres du groupe peuvent pointer
+- Liée à `users` via la table de jonction `user_groups` (relation many-to-many)
+
+| Champ | Type | Contraintes | Description |
+|-------|------|-------------|-------------|
+| id | UUID | PK | |
+| name | VARCHAR(255) | NOT NULL, UNIQUE | Nom du groupe (ex: « Groupe A », « Équipe Marketing ») |
+| description | TEXT | NULLABLE | Description du groupe |
+| created_at | TIMESTAMPTZ | DEFAULT `now()` | |
+
+---
+
+### 2.9 `user_groups` — Appartenance aux groupes
+
+**Rôle :** Table de jonction entre `users` et `groups` (relation many-to-many).
+
+**Description détaillée :**
+Chaque ligne représente l'appartenance d'un utilisateur à un groupe. Un utilisateur peut appartenir à plusieurs groupes, et un groupe peut contenir plusieurs utilisateurs.
+
+**Pourquoi cette table ?**
+- Relation many-to-many standard entre `users` et `groups`
+- Permet de vérifier si un utilisateur appartient au groupe lié à une session avant d'autoriser le pointage QR
+- Pas de colonne `id` : la clé primaire est composite (user_id, group_id)
+
+| Champ | Type | Contraintes | Description |
+|-------|------|-------------|-------------|
+| user_id | UUID | FK → `users.id` ON DELETE CASCADE, NOT NULL | |
+| group_id | UUID | FK → `groups.id` ON DELETE CASCADE, NOT NULL | |
+
+**Contraintes :**
+- `PRIMARY KEY (user_id, group_id)`
+
+**Index :**
+- `INDEX(group_id)`
+
+---
+
 ## 3. Ce qui a été supprimé et pourquoi
 
 | Table supprimée | Raison |
@@ -339,8 +404,6 @@ Lorsqu'un utilisateur se connecte, l'API délivre deux tokens JWT : un access to
 | `periods` | Les sessions ont des dates de début/fin explicites, pas besoin de période agrégée. |
 | `activities` | Simplifié : une session a un titre, pas besoin d'une table activité séparée. |
 | `rooms` | Non nécessaire pour le pointage. Peut être un champ texte dans `sessions` si besoin. |
-| `groups` | Pas besoin de regroupement (classe/équipe) pour l'import admin. Pointages individuels uniquement. |
-| `user_groups` | Table de jonction devenue inutile après la suppression de `groups`. |
 
 ---
 
@@ -348,7 +411,7 @@ Lorsqu'un utilisateur se connecte, l'API délivre deux tokens JWT : un access to
 
 | Scénario | `sessions` | Pointage |
 |---|---|---|
-| **Cours universitaire** | title="Algèbre S2", start=08:00, end=10:00 | Lié à la session |
+| **Cours universitaire (Groupe A)** | title="Algèbre S2", group_id="Groupe A", start=08:00, end=10:00 | Lié à la session, restreint au groupe |
 | **Entrée/sortie entreprise** | NULL (pointage libre) | session_id = NULL |
 | **Réunion d'équipe** | title="Réunion sprint", start=14:00, end=15:00 | Lié à la session |
 | **Shift d'usine** | title="Shift matin", start=06:00, end=14:00 | Lié à la session |
@@ -365,6 +428,10 @@ CREATE INDEX idx_attendance_session ON attendance_records(session_id);
 
 -- Sessions
 CREATE INDEX idx_sessions_time ON sessions(start_time, end_time);
+CREATE INDEX idx_sessions_group ON sessions(group_id);
+
+-- Groups
+CREATE INDEX idx_user_groups_group ON user_groups(group_id);
 
 -- Face
 CREATE INDEX idx_face_user ON face_encodings(user_id);

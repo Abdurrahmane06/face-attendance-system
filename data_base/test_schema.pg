@@ -1,0 +1,506 @@
+-- ======================================================================
+-- test_schema.pg — Tests pgTAP pour le schéma de la base de données
+--                  Système de pointage par reconnaissance faciale
+-- ======================================================================
+--
+-- Utilisation :
+--   1. Installer pgTAP sur le serveur PostgreSQL :
+--        CREATE EXTENSION IF NOT EXISTS pgtap;
+--   2. Exécuter le test :
+--        psql -d faceattend -f data_base/init.sql
+--        psql -d faceattend -f data_base/test_schema.pg
+--   3. Ou avec pg_prove :
+--        pg_prove -d faceattend data_base/test_schema.pg
+-- ======================================================================
+
+BEGIN;
+
+-- Plan : nombre total de tests
+SELECT plan(221);
+
+-- ============================
+-- Schéma par défaut : public
+-- ============================
+
+-- ============================
+-- 1. EXTENSIONS
+-- ============================
+SELECT has_extension('pgcrypto', 'Extension pgcrypto doit être présente');
+
+-- ============================
+-- 2. TYPES ENUM
+-- ============================
+SELECT has_enum('public', 'profile_type', 'Type ENUM profile_type doit exister');
+SELECT enum_has_labels('public', 'profile_type', ARRAY['student', 'employee', 'teacher', 'admin'], 'profile_type doit avoir 4 labels');
+
+SELECT has_enum('public', 'auth_role', 'Type ENUM auth_role doit exister');
+SELECT enum_has_labels('public', 'auth_role', ARRAY['admin', 'manager', 'user'], 'auth_role doit avoir 3 labels');
+
+SELECT has_enum('public', 'attendance_method', 'Type ENUM attendance_method doit exister');
+SELECT enum_has_labels('public', 'attendance_method', ARRAY['FACE', 'MANUAL', 'CARD', 'QR'], 'attendance_method doit avoir 4 labels');
+
+-- ============================
+-- 3. FONCTION TRIGGER
+-- ============================
+SELECT has_function('public', 'trigger_set_updated_at', '{}', 'Fonction trigger_set_updated_at doit exister');
+SELECT function_lang_is('public', 'trigger_set_updated_at', 'plpgsql', 'trigger_set_updated_at doit être en plpgsql');
+SELECT function_returns('public', 'trigger_set_updated_at', 'trigger', 'trigger_set_updated_at doit retourner trigger');
+
+-- ============================
+-- 4. TABLE users
+-- ============================
+SELECT has_table('public', 'users', 'Table users doit exister');
+SELECT has_column('public', 'users', 'id', 'users.id doit exister');
+SELECT col_type_is('public', 'users', 'id', 'uuid', 'users.id doit être UUID');
+SELECT col_is_pk('public', 'users', 'id', 'users.id doit être PK');
+SELECT col_has_default('public', 'users', 'id', 'users.id doit avoir DEFAULT gen_random_uuid()');
+SELECT col_default_is('public', 'users', 'id', 'gen_random_uuid()', 'users.id DEFAULT doit être gen_random_uuid()');
+
+SELECT has_column('public', 'users', 'email', 'users.email doit exister');
+SELECT col_type_is('public', 'users', 'email', 'character varying(255)', 'users.email doit être VARCHAR(255)');
+SELECT col_not_null('public', 'users', 'email', 'users.email doit être NOT NULL');
+SELECT has_index('public', 'users', 'uq_users_email', 'users.email doit avoir un index unique');
+
+SELECT has_column('public', 'users', 'password_hash', 'users.password_hash doit exister');
+SELECT col_type_is('public', 'users', 'password_hash', 'character varying(255)', 'users.password_hash doit être VARCHAR(255)');
+SELECT col_not_null('public', 'users', 'password_hash', 'users.password_hash doit être NOT NULL');
+
+SELECT has_column('public', 'users', 'full_name', 'users.full_name doit exister');
+SELECT col_type_is('public', 'users', 'full_name', 'character varying(255)', 'users.full_name doit être VARCHAR(255)');
+SELECT col_not_null('public', 'users', 'full_name', 'users.full_name doit être NOT NULL');
+
+SELECT has_column('public', 'users', 'profile_type', 'users.profile_type doit exister');
+SELECT col_type_is('public', 'users', 'profile_type', 'profile_type', 'users.profile_type doit être ENUM profile_type');
+SELECT col_not_null('public', 'users', 'profile_type', 'users.profile_type doit être NOT NULL');
+
+SELECT has_column('public', 'users', 'auth_role', 'users.auth_role doit exister');
+SELECT col_type_is('public', 'users', 'auth_role', 'auth_role', 'users.auth_role doit être ENUM auth_role');
+SELECT col_not_null('public', 'users', 'auth_role', 'users.auth_role doit être NOT NULL');
+
+SELECT has_column('public', 'users', 'identifier', 'users.identifier doit exister');
+SELECT col_type_is('public', 'users', 'identifier', 'character varying(20)', 'users.identifier doit être VARCHAR(20)');
+SELECT col_is_unique('public', 'users', 'identifier', 'users.identifier doit être UNIQUE');
+
+SELECT has_column('public', 'users', 'phone', 'users.phone doit exister');
+SELECT col_type_is('public', 'users', 'phone', 'character varying(20)', 'users.phone doit être VARCHAR(20)');
+
+SELECT has_column('public', 'users', 'is_active', 'users.is_active doit exister');
+SELECT col_type_is('public', 'users', 'is_active', 'boolean', 'users.is_active doit être BOOLEAN');
+SELECT col_default_is('public', 'users', 'is_active', 'true', 'users.is_active DEFAULT doit être true');
+
+SELECT has_column('public', 'users', 'created_at', 'users.created_at doit exister');
+SELECT col_type_is('public', 'users', 'created_at', 'timestamp with time zone', 'users.created_at doit être TIMESTAMPTZ');
+SELECT col_has_default('public', 'users', 'created_at', 'users.created_at doit avoir DEFAULT');
+
+SELECT has_column('public', 'users', 'updated_at', 'users.updated_at doit exister');
+SELECT col_type_is('public', 'users', 'updated_at', 'timestamp with time zone', 'users.updated_at doit être TIMESTAMPTZ');
+SELECT col_has_default('public', 'users', 'updated_at', 'users.updated_at doit avoir DEFAULT');
+
+-- Trigger updated_at sur users
+SELECT has_trigger('public', 'users', 'trg_users_updated_at', 'users doit avoir le trigger trg_users_updated_at');
+
+-- (Testé ci-dessus avec les colonnes)
+
+-- ============================
+-- 5. TABLE groups
+-- ============================
+SELECT has_table('public', 'groups', 'Table groups doit exister');
+SELECT has_column('public', 'groups', 'id', 'groups.id doit exister');
+SELECT col_type_is('public', 'groups', 'id', 'uuid', 'groups.id doit être UUID');
+SELECT col_is_pk('public', 'groups', 'id', 'groups.id doit être PK');
+
+SELECT has_column('public', 'groups', 'name', 'groups.name doit exister');
+SELECT col_type_is('public', 'groups', 'name', 'character varying(255)', 'groups.name doit être VARCHAR(255)');
+SELECT col_not_null('public', 'groups', 'name', 'groups.name doit être NOT NULL');
+SELECT col_is_unique('public', 'groups', 'name', 'groups.name doit être UNIQUE');
+
+SELECT has_column('public', 'groups', 'description', 'groups.description doit exister');
+SELECT col_type_is('public', 'groups', 'description', 'text', 'groups.description doit être TEXT');
+
+SELECT has_column('public', 'groups', 'created_at', 'groups.created_at doit exister');
+SELECT col_type_is('public', 'groups', 'created_at', 'timestamp with time zone', 'groups.created_at doit être TIMESTAMPTZ');
+
+-- ============================
+-- 6. TABLE user_groups (jonction)
+-- ============================
+SELECT has_table('public', 'user_groups', 'Table user_groups doit exister');
+SELECT has_column('public', 'user_groups', 'user_id', 'user_groups.user_id doit exister');
+SELECT col_type_is('public', 'user_groups', 'user_id', 'uuid', 'user_groups.user_id doit être UUID');
+SELECT col_not_null('public', 'user_groups', 'user_id', 'user_groups.user_id doit être NOT NULL');
+
+SELECT has_column('public', 'user_groups', 'group_id', 'user_groups.group_id doit exister');
+SELECT col_type_is('public', 'user_groups', 'group_id', 'uuid', 'user_groups.group_id doit être UUID');
+SELECT col_not_null('public', 'user_groups', 'group_id', 'user_groups.group_id doit être NOT NULL');
+
+-- PK composite
+SELECT col_is_pk('public', 'user_groups', ARRAY['user_id', 'group_id'], 'user_groups PK doit être composite (user_id, group_id)');
+
+-- FK
+SELECT col_is_fk('public', 'user_groups', 'user_id', 'user_groups.user_id doit être FK → users.id');
+SELECT col_is_fk('public', 'user_groups', 'group_id', 'user_groups.group_id doit être FK → groups.id');
+
+-- ============================
+-- 7. TABLE sessions
+-- ============================
+SELECT has_table('public', 'sessions', 'Table sessions doit exister');
+SELECT has_column('public', 'sessions', 'id', 'sessions.id doit exister');
+SELECT col_type_is('public', 'sessions', 'id', 'uuid', 'sessions.id doit être UUID');
+SELECT col_is_pk('public', 'sessions', 'id', 'sessions.id doit être PK');
+
+SELECT has_column('public', 'sessions', 'group_id', 'sessions.group_id doit exister');
+SELECT col_type_is('public', 'sessions', 'group_id', 'uuid', 'sessions.group_id doit être UUID');
+SELECT col_is_fk('public', 'sessions', 'group_id', 'sessions.group_id doit être FK → groups.id');
+
+SELECT has_column('public', 'sessions', 'title', 'sessions.title doit exister');
+SELECT col_type_is('public', 'sessions', 'title', 'character varying(255)', 'sessions.title doit être VARCHAR(255)');
+SELECT col_not_null('public', 'sessions', 'title', 'sessions.title doit être NOT NULL');
+
+SELECT has_column('public', 'sessions', 'start_time', 'sessions.start_time doit exister');
+SELECT col_type_is('public', 'sessions', 'start_time', 'timestamp with time zone', 'sessions.start_time doit être TIMESTAMPTZ');
+SELECT col_not_null('public', 'sessions', 'start_time', 'sessions.start_time doit être NOT NULL');
+
+SELECT has_column('public', 'sessions', 'end_time', 'sessions.end_time doit exister');
+SELECT col_type_is('public', 'sessions', 'end_time', 'timestamp with time zone', 'sessions.end_time doit être TIMESTAMPTZ');
+SELECT col_not_null('public', 'sessions', 'end_time', 'sessions.end_time doit être NOT NULL');
+
+SELECT has_column('public', 'sessions', 'notes', 'sessions.notes doit exister');
+SELECT col_type_is('public', 'sessions', 'notes', 'text', 'sessions.notes doit être TEXT');
+
+SELECT has_column('public', 'sessions', 'created_at', 'sessions.created_at doit exister');
+
+-- CHECK end_time > start_time
+SELECT col_has_check('public', 'sessions', ARRAY['end_time', 'start_time']::name[], 'CHECK end_time > start_time doit exister sur sessions');
+
+-- ============================
+-- 8. TABLE face_images
+-- ============================
+SELECT has_table('public', 'face_images', 'Table face_images doit exister');
+SELECT has_column('public', 'face_images', 'id', 'face_images.id doit exister');
+SELECT col_type_is('public', 'face_images', 'id', 'uuid', 'face_images.id doit être UUID');
+SELECT col_is_pk('public', 'face_images', 'id', 'face_images.id doit être PK');
+
+SELECT has_column('public', 'face_images', 'user_id', 'face_images.user_id doit exister');
+SELECT col_type_is('public', 'face_images', 'user_id', 'uuid', 'face_images.user_id doit être UUID');
+SELECT col_not_null('public', 'face_images', 'user_id', 'face_images.user_id doit être NOT NULL');
+SELECT col_is_fk('public', 'face_images', 'user_id', 'face_images.user_id doit être FK → users.id');
+
+SELECT has_column('public', 'face_images', 'image_path', 'face_images.image_path doit exister');
+SELECT col_type_is('public', 'face_images', 'image_path', 'character varying(500)', 'face_images.image_path doit être VARCHAR(500)');
+SELECT col_not_null('public', 'face_images', 'image_path', 'face_images.image_path doit être NOT NULL');
+
+SELECT has_column('public', 'face_images', 'is_primary', 'face_images.is_primary doit exister');
+SELECT col_type_is('public', 'face_images', 'is_primary', 'boolean', 'face_images.is_primary doit être BOOLEAN');
+SELECT col_default_is('public', 'face_images', 'is_primary', 'false', 'face_images.is_primary DEFAULT doit être false');
+
+SELECT has_column('public', 'face_images', 'created_at', 'face_images.created_at doit exister');
+
+-- ============================
+-- 9. TABLE face_encodings
+-- ============================
+SELECT has_table('public', 'face_encodings', 'Table face_encodings doit exister');
+SELECT has_column('public', 'face_encodings', 'id', 'face_encodings.id doit exister');
+SELECT col_type_is('public', 'face_encodings', 'id', 'uuid', 'face_encodings.id doit être UUID');
+SELECT col_is_pk('public', 'face_encodings', 'id', 'face_encodings.id doit être PK');
+
+SELECT has_column('public', 'face_encodings', 'user_id', 'face_encodings.user_id doit exister');
+SELECT col_type_is('public', 'face_encodings', 'user_id', 'uuid', 'face_encodings.user_id doit être UUID');
+SELECT col_not_null('public', 'face_encodings', 'user_id', 'face_encodings.user_id doit être NOT NULL');
+SELECT col_is_fk('public', 'face_encodings', 'user_id', 'face_encodings.user_id doit être FK → users.id');
+
+SELECT has_column('public', 'face_encodings', 'image_id', 'face_encodings.image_id doit exister');
+SELECT col_type_is('public', 'face_encodings', 'image_id', 'uuid', 'face_encodings.image_id doit être UUID');
+SELECT col_is_fk('public', 'face_encodings', 'image_id', 'face_encodings.image_id doit être FK → face_images.id');
+
+SELECT has_column('public', 'face_encodings', 'encoding', 'face_encodings.encoding doit exister');
+
+-- encoding peut être VECTOR(128) si pgvector, sinon TEXT
+SELECT ok(
+    (SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'face_encodings' AND column_name = 'encoding'
+        AND (udt_name = 'vector' OR data_type = 'text')
+    )),
+    'face_encodings.encoding doit être VECTOR(128) (pgvector) ou TEXT (fallback)'
+);
+
+SELECT has_column('public', 'face_encodings', 'encoding_json', 'face_encodings.encoding_json doit exister');
+SELECT col_type_is('public', 'face_encodings', 'encoding_json', 'text', 'face_encodings.encoding_json doit être TEXT');
+
+SELECT has_column('public', 'face_encodings', 'confidence', 'face_encodings.confidence doit exister');
+SELECT col_type_is('public', 'face_encodings', 'confidence', 'double precision', 'face_encodings.confidence doit être FLOAT/double precision');
+
+SELECT has_column('public', 'face_encodings', 'created_at', 'face_encodings.created_at doit exister');
+
+-- CHECK au moins encoding ou encoding_json non nul
+SELECT col_has_check('public', 'face_encodings', ARRAY['encoding', 'encoding_json']::name[], 'CHECK encoding OR encoding_json pas nul doit exister sur face_encodings');
+
+-- ============================
+-- 10. TABLE attendance_records
+-- ============================
+SELECT has_table('public', 'attendance_records', 'Table attendance_records doit exister');
+SELECT has_column('public', 'attendance_records', 'id', 'attendance_records.id doit exister');
+SELECT col_type_is('public', 'attendance_records', 'id', 'uuid', 'attendance_records.id doit être UUID');
+SELECT col_is_pk('public', 'attendance_records', 'id', 'attendance_records.id doit être PK');
+
+SELECT has_column('public', 'attendance_records', 'user_id', 'attendance_records.user_id doit exister');
+SELECT col_type_is('public', 'attendance_records', 'user_id', 'uuid', 'attendance_records.user_id doit être UUID');
+SELECT col_not_null('public', 'attendance_records', 'user_id', 'attendance_records.user_id doit être NOT NULL');
+SELECT col_is_fk('public', 'attendance_records', 'user_id', 'attendance_records.user_id doit être FK → users.id');
+
+SELECT has_column('public', 'attendance_records', 'session_id', 'attendance_records.session_id doit exister');
+SELECT col_type_is('public', 'attendance_records', 'session_id', 'uuid', 'attendance_records.session_id doit être UUID');
+SELECT col_is_fk('public', 'attendance_records', 'session_id', 'attendance_records.session_id doit être FK → sessions.id');
+
+SELECT has_column('public', 'attendance_records', 'record_date', 'attendance_records.record_date doit exister');
+SELECT col_type_is('public', 'attendance_records', 'record_date', 'date', 'attendance_records.record_date doit être DATE');
+SELECT col_not_null('public', 'attendance_records', 'record_date', 'attendance_records.record_date doit être NOT NULL');
+
+SELECT has_column('public', 'attendance_records', 'check_in', 'attendance_records.check_in doit exister');
+SELECT col_type_is('public', 'attendance_records', 'check_in', 'timestamp with time zone', 'attendance_records.check_in doit être TIMESTAMPTZ');
+SELECT col_not_null('public', 'attendance_records', 'check_in', 'attendance_records.check_in doit être NOT NULL');
+
+SELECT has_column('public', 'attendance_records', 'check_out', 'attendance_records.check_out doit exister');
+SELECT col_type_is('public', 'attendance_records', 'check_out', 'timestamp with time zone', 'attendance_records.check_out doit être TIMESTAMPTZ');
+
+SELECT has_column('public', 'attendance_records', 'confidence_score', 'attendance_records.confidence_score doit exister');
+SELECT col_type_is('public', 'attendance_records', 'confidence_score', 'double precision', 'attendance_records.confidence_score doit être FLOAT/double precision');
+
+SELECT has_column('public', 'attendance_records', 'method', 'attendance_records.method doit exister');
+SELECT col_type_is('public', 'attendance_records', 'method', 'attendance_method', 'attendance_records.method doit être ENUM attendance_method');
+SELECT col_not_null('public', 'attendance_records', 'method', 'attendance_records.method doit être NOT NULL');
+
+SELECT has_column('public', 'attendance_records', 'notes', 'attendance_records.notes doit exister');
+SELECT col_type_is('public', 'attendance_records', 'notes', 'text', 'attendance_records.notes doit être TEXT');
+
+SELECT has_column('public', 'attendance_records', 'created_at', 'attendance_records.created_at doit exister');
+
+-- CHECK check_out > check_in
+SELECT col_has_check('public', 'attendance_records', ARRAY['check_out', 'check_in']::name[], 'CHECK check_out > check_in doit exister sur attendance_records');
+
+-- Index unique : user_id + session_id
+SELECT has_index('public', 'attendance_records', 'uq_attendance_user_session', 'Index unique uq_attendance_user_session doit exister');
+
+-- Index unique partiel : (user_id, record_date) WHERE session_id IS NULL
+SELECT has_index('public', 'attendance_records', 'uq_attendance_user_date_free', 'Index unique partiel uq_attendance_user_date_free doit exister');
+
+-- ============================
+-- 11. TABLE audit_logs
+-- ============================
+SELECT has_table('public', 'audit_logs', 'Table audit_logs doit exister');
+SELECT has_column('public', 'audit_logs', 'id', 'audit_logs.id doit exister');
+SELECT col_type_is('public', 'audit_logs', 'id', 'uuid', 'audit_logs.id doit être UUID');
+SELECT col_is_pk('public', 'audit_logs', 'id', 'audit_logs.id doit être PK');
+
+SELECT has_column('public', 'audit_logs', 'user_id', 'audit_logs.user_id doit exister');
+SELECT col_type_is('public', 'audit_logs', 'user_id', 'uuid', 'audit_logs.user_id doit être UUID');
+SELECT col_is_fk('public', 'audit_logs', 'user_id', 'audit_logs.user_id doit être FK → users.id');
+
+SELECT has_column('public', 'audit_logs', 'action', 'audit_logs.action doit exister');
+SELECT col_type_is('public', 'audit_logs', 'action', 'character varying(50)', 'audit_logs.action doit être VARCHAR(50)');
+SELECT col_not_null('public', 'audit_logs', 'action', 'audit_logs.action doit être NOT NULL');
+
+SELECT has_column('public', 'audit_logs', 'entity_type', 'audit_logs.entity_type doit exister');
+SELECT col_type_is('public', 'audit_logs', 'entity_type', 'character varying(50)', 'audit_logs.entity_type doit être VARCHAR(50)');
+
+SELECT has_column('public', 'audit_logs', 'entity_id', 'audit_logs.entity_id doit exister');
+SELECT col_type_is('public', 'audit_logs', 'entity_id', 'uuid', 'audit_logs.entity_id doit être UUID');
+
+SELECT has_column('public', 'audit_logs', 'details', 'audit_logs.details doit exister');
+SELECT col_type_is('public', 'audit_logs', 'details', 'jsonb', 'audit_logs.details doit être JSONB');
+
+SELECT has_column('public', 'audit_logs', 'ip_address', 'audit_logs.ip_address doit exister');
+SELECT col_type_is('public', 'audit_logs', 'ip_address', 'character varying(45)', 'audit_logs.ip_address doit être VARCHAR(45)');
+
+SELECT has_column('public', 'audit_logs', 'created_at', 'audit_logs.created_at doit exister');
+
+-- ============================
+-- 12. TABLE refresh_tokens
+-- ============================
+SELECT has_table('public', 'refresh_tokens', 'Table refresh_tokens doit exister');
+SELECT has_column('public', 'refresh_tokens', 'id', 'refresh_tokens.id doit exister');
+SELECT col_type_is('public', 'refresh_tokens', 'id', 'uuid', 'refresh_tokens.id doit être UUID');
+SELECT col_is_pk('public', 'refresh_tokens', 'id', 'refresh_tokens.id doit être PK');
+
+SELECT has_column('public', 'refresh_tokens', 'user_id', 'refresh_tokens.user_id doit exister');
+SELECT col_type_is('public', 'refresh_tokens', 'user_id', 'uuid', 'refresh_tokens.user_id doit être UUID');
+SELECT col_not_null('public', 'refresh_tokens', 'user_id', 'refresh_tokens.user_id doit être NOT NULL');
+SELECT col_is_fk('public', 'refresh_tokens', 'user_id', 'refresh_tokens.user_id doit être FK → users.id');
+
+SELECT has_column('public', 'refresh_tokens', 'token_hash', 'refresh_tokens.token_hash doit exister');
+SELECT col_type_is('public', 'refresh_tokens', 'token_hash', 'character varying(255)', 'refresh_tokens.token_hash doit être VARCHAR(255)');
+SELECT col_not_null('public', 'refresh_tokens', 'token_hash', 'refresh_tokens.token_hash doit être NOT NULL');
+SELECT has_index('public', 'refresh_tokens', 'uq_refresh_tokens_token_hash', 'refresh_tokens.token_hash doit avoir un index unique');
+
+SELECT has_column('public', 'refresh_tokens', 'expires_at', 'refresh_tokens.expires_at doit exister');
+SELECT col_type_is('public', 'refresh_tokens', 'expires_at', 'timestamp with time zone', 'refresh_tokens.expires_at doit être TIMESTAMPTZ');
+SELECT col_not_null('public', 'refresh_tokens', 'expires_at', 'refresh_tokens.expires_at doit être NOT NULL');
+
+SELECT has_column('public', 'refresh_tokens', 'is_revoked', 'refresh_tokens.is_revoked doit exister');
+SELECT col_type_is('public', 'refresh_tokens', 'is_revoked', 'boolean', 'refresh_tokens.is_revoked doit être BOOLEAN');
+SELECT col_default_is('public', 'refresh_tokens', 'is_revoked', 'false', 'refresh_tokens.is_revoked DEFAULT doit être false');
+
+SELECT has_column('public', 'refresh_tokens', 'created_at', 'refresh_tokens.created_at doit exister');
+
+-- ============================
+-- 13. INDEX DE PERFORMANCE
+-- ============================
+-- Attendance
+SELECT has_index('public', 'attendance_records', 'idx_attendance_date',      'Index idx_attendance_date doit exister');
+SELECT has_index('public', 'attendance_records', 'idx_attendance_user_date', 'Index idx_attendance_user_date doit exister');
+SELECT has_index('public', 'attendance_records', 'idx_attendance_session',   'Index idx_attendance_session doit exister');
+
+-- Sessions
+SELECT has_index('public', 'sessions', 'idx_sessions_time',  'Index idx_sessions_time doit exister');
+SELECT has_index('public', 'sessions', 'idx_sessions_group', 'Index idx_sessions_group doit exister');
+
+-- Groups
+SELECT has_index('public', 'user_groups', 'idx_user_groups_group', 'Index idx_user_groups_group doit exister');
+
+-- Face
+SELECT has_index('public', 'face_encodings', 'idx_face_user',  'Index idx_face_user doit exister');
+SELECT has_index('public', 'face_encodings', 'idx_face_image', 'Index idx_face_image doit exister');
+SELECT has_index('public', 'face_images', 'idx_face_images_user', 'Index idx_face_images_user doit exister');
+
+-- Audit
+SELECT has_index('public', 'audit_logs', 'idx_audit_user',   'Index idx_audit_user doit exister');
+SELECT has_index('public', 'audit_logs', 'idx_audit_action', 'Index idx_audit_action doit exister');
+SELECT has_index('public', 'audit_logs', 'idx_audit_date',   'Index idx_audit_date doit exister');
+
+-- Refresh tokens
+SELECT has_index('public', 'refresh_tokens', 'idx_refresh_user', 'Index idx_refresh_user doit exister');
+
+-- ============================
+-- 14. VUES
+-- ============================
+SELECT has_view('public', 'v_active_sessions_today',     'Vue v_active_sessions_today doit exister');
+SELECT has_view('public', 'v_user_last_attendance',      'Vue v_user_last_attendance doit exister');
+SELECT has_view('public', 'v_daily_attendance_summary',  'Vue v_daily_attendance_summary doit exister');
+
+-- ============================
+-- 15. TESTS D'INTÉGRITÉ (données seed)
+-- ============================
+-- Vérifier que les données seed sont présentes
+SELECT ok(
+    (SELECT COUNT(*) FROM users) >= 6,
+    'Au moins 6 utilisateurs seed doivent être présents'
+);
+
+SELECT ok(
+    (SELECT COUNT(*) FROM groups) >= 3,
+    'Au moins 3 groupes seed doivent être présents'
+);
+
+SELECT ok(
+    (SELECT COUNT(*) FROM sessions) >= 2,
+    'Au moins 2 sessions seed doivent être présentes'
+);
+
+SELECT ok(
+    (SELECT COUNT(*) FROM attendance_records) >= 3,
+    'Au moins 3 pointages seed doivent être présents'
+);
+
+SELECT ok(
+    (SELECT COUNT(*) FROM user_groups) >= 4,
+    'Au moins 4 associations user_groups seed doivent être présentes'
+);
+
+-- Vérifier que les emails uniques sont respectés
+SELECT ok(
+    (SELECT COUNT(*) FROM users) = (SELECT COUNT(DISTINCT email) FROM users),
+    'Tous les emails des utilisateurs doivent être uniques'
+);
+
+-- Vérifier que chaque pointage respecte check_out > check_in
+SELECT ok(
+    NOT EXISTS (
+        SELECT 1 FROM attendance_records
+        WHERE check_out IS NOT NULL AND check_out <= check_in
+    ),
+    'Tous les check_out doivent être > check_in quand renseignés'
+);
+
+-- Vérifier que les sessions respectent end_time > start_time
+SELECT ok(
+    NOT EXISTS (
+        SELECT 1 FROM sessions WHERE end_time <= start_time
+    ),
+    'Tous les end_time doivent être > start_time'
+);
+
+-- ============================
+-- 16. TESTS COMPORTEMENTAUX (contraintes)
+-- ============================
+PREPARE insert_duplicate_free_attendance AS
+    INSERT INTO attendance_records (user_id, session_id, record_date, check_in, method)
+    VALUES (
+        (SELECT id FROM users ORDER BY created_at LIMIT 1),
+        NULL,
+        CURRENT_DATE,
+        now(),
+        'FACE'
+    );
+
+-- Premier insert doit réussir
+SELECT lives_ok(
+    'insert_duplicate_free_attendance',
+    'Premier pointage libre du jour doit réussir'
+);
+
+-- Second insert (même user, même jour, session_id NULL) doit échouer
+SELECT throws_ok(
+    'insert_duplicate_free_attendance',
+    23505,  -- unique_violation
+    NULL,
+    'Second pointage libre du jour doit lever une violation de contrainte UNIQUE'
+);
+
+-- Tester CHECK end_time > start_time
+PREPARE insert_invalid_session AS
+    INSERT INTO sessions (title, start_time, end_time)
+    VALUES ('Test invalide', now(), now() - INTERVAL '1 hour');
+
+SELECT throws_ok(
+    'insert_invalid_session',
+    23514,  -- check_violation
+    NULL,
+    'Session avec end_time < start_time doit lever CHECK violation'
+);
+
+-- Tester CHECK check_out > check_in
+PREPARE insert_invalid_checkout AS
+    INSERT INTO attendance_records (user_id, session_id, record_date, check_in, check_out, method)
+    VALUES (
+        (SELECT id FROM users ORDER BY created_at LIMIT 1),
+        NULL,
+        CURRENT_DATE + 1,
+        now(),
+        now() - INTERVAL '1 hour',
+        'FACE'
+    );
+
+SELECT throws_ok(
+    'insert_invalid_checkout',
+    23514,  -- check_violation
+    NULL,
+    'Pointage avec check_out < check_in doit lever CHECK violation'
+);
+
+-- Tester trigger updated_at
+PREPARE update_user AS
+    UPDATE users SET phone = '+221 77 999 99 99'
+    WHERE email = 'admin@example.com';
+
+SELECT lives_ok('update_user', 'UPDATE sur users doit réussir');
+
+SELECT ok(
+    (SELECT updated_at > created_at FROM users WHERE email = 'admin@example.com'),
+    'updated_at doit être > created_at après UPDATE (trigger)'
+);
+
+-- ============================
+-- FIN
+-- ============================
+SELECT * FROM finish();
+
+ROLLBACK;

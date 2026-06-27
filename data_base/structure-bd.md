@@ -16,29 +16,31 @@
 
 ## Tables
 
-### 1. `users` — Comptes d'authentification (liés à Supabase Auth)
+### 1. `profiles` — Profils des comptes (liés à Supabase Auth)
 
-Cette table stocke les comptes utilisateur permettant l'authentification au système. Chaque ligne correspond à un compte lié à l'authentification Supabase (`auth.users`). Le champ `role` détermine les permissions : un `admin` peut gérer les employés et consulter tous les pointages, tandis qu'un `employee` ne peut voir que ses propres données. La contrainte `CHECK` garantit qu'aucun autre rôle ne peut être attribué.
+Cette table stocke les profils des comptes utilisateur, liés directement à l'authentification Supabase (`auth.users`) via la clé primaire. Le champ `role` détermine les permissions : un `admin` peut gérer les employés et consulter tous les pointages, tandis qu'un `employee` ne peut voir que ses propres données. `display_name` permet d'afficher un nom sans JOIN avec `employees`. `is_active` permet de désactiver un compte sans soft delete.
 
-| Colonne       | Type                  | Contraintes                        |
-|---------------|-----------------------|------------------------------------|
-| `id`          | UUID                  | PK, lié à `auth.users` Supabase    |
-| `email`       | TEXT                  | UNIQUE NOT NULL                    |
-| `role`        | TEXT                  | NOT NULL, CHECK(`role` IN ('admin', 'employee')) |
-| `created_at`  | TIMESTAMPTZ           | DEFAULT `now()`                    |
-| `updated_at`  | TIMESTAMPTZ           | DEFAULT `now()`                    |
-| `deleted_at`  | TIMESTAMPTZ           | DEFAULT NULL                       |
+| Colonne          | Type                  | Contraintes                                       |
+|------------------|-----------------------|---------------------------------------------------|
+| `id`             | UUID                  | PK, FK → `auth.users(id)` ON DELETE CASCADE       |
+| `role`           | TEXT                  | NOT NULL, CHECK(`role` IN ('admin', 'employee'))   |
+| `display_name`   | TEXT                  |                                                   |
+| `is_active`      | BOOLEAN               | DEFAULT TRUE                                      |
+| `last_login_at`  | TIMESTAMPTZ           |                                                   |
+| `created_at`     | TIMESTAMPTZ           | DEFAULT `now()`                                   |
+| `updated_at`     | TIMESTAMPTZ           | DEFAULT `now()`                                   |
+| `deleted_at`     | TIMESTAMPTZ           | DEFAULT NULL                                      |
 
 ---
 
 ### 2. `employees` — Informations des employés
 
-Cette table contient les informations personnelles et biométriques des employés. Chaque employé est lié à un compte `user` via la clé étrangère `user_id` (relation 1-1). Le champ `face_encoding` stocke le vecteur facial sérialisé (en base64 ou JSON) produit par la librairie `face_recognition` — c'est ce vecteur qui permet d'identifier l'employé lors du pointage par caméra. `photo_url` pointe vers l'image stockée dans Supabase Storage.
+Cette table contient les informations personnelles et biométriques des employés. Chaque employé est lié à un profil via la clé étrangère `user_id` (relation 1-1). Le champ `face_encoding` stocke le vecteur facial sérialisé (en base64 ou JSON) produit par la librairie `face_recognition` — c'est ce vecteur qui permet d'identifier l'employé lors du pointage par caméra. `photo_url` pointe vers l'image stockée dans Supabase Storage.
 
 | Colonne         | Type                  | Contraintes                        |
 |-----------------|-----------------------|------------------------------------|
 | `id`            | UUID                  | PK                                 |
-| `user_id`       | UUID                  | FK → `users(id)`                   |
+| `user_id`       | UUID                  | FK → `profiles(id)`                |
 | `first_name`    | TEXT                  | NOT NULL                           |
 | `last_name`     | TEXT                  | NOT NULL                           |
 | `phone`         | TEXT                  |                                    |
@@ -109,16 +111,18 @@ Cette table enregistre les pointages d'entrée et de sortie de chaque employé p
 ### Diagramme de classes (UML)
 
 Ce diagramme représente la structure statique du système sous forme de classes avec leurs attributs et relations. Chaque classe correspond à une table de la base de données. Les attributs sont typés (UUID, String, Timestamp, etc.) et la visibilité est privée (`-`). Les relations indiquent les cardinalités :
-- **User 1 → 1 Employee** : un utilisateur possède un et un seul profil employé
+- **Profile 1 → 1 Employee** : un profil possède un et un seul employé
 - **Employee 1 → N WorkSchedule** : un employé peut avoir plusieurs créneaux horaires (un par jour de semaine)
 - **Employee 1 → N Attendance** : un employé a plusieurs pointages (un par jour travaillé)
 
 ```mermaid
 classDiagram
-    class User {
+    class Profile {
         -UUID id
-        -String email
         -String role
+        -String display_name
+        -bool is_active
+        -Timestamp last_login_at
         -Timestamp created_at
         -Timestamp updated_at
         -Timestamp deleted_at
@@ -165,7 +169,7 @@ classDiagram
         -Timestamp deleted_at
     }
 
-    User "1" --> "1" Employee : possède
+    Profile "1" --> "1" Employee : possède
     Employee "1" --> "N" WorkSchedule : travaille selon
     Employee "1" --> "N" Attendance : pointe
 ```
@@ -173,7 +177,7 @@ classDiagram
 ### Modèle Conceptuel de Données (MCD — Merise)
 
 Ce diagramme conceptuel (indépendant de toute implémentation technique) décrit les entités et leurs relations selon la notation Merise (Pascal Chen). Les cardinalités se lisent comme suit :
-- **USER ||--|| EMPLOYEE** : un USER a au moins un et au plus un EMPLOYEE (relation 1-1 totale)
+- **PROFILE ||--|| EMPLOYEE** : un PROFILE a au moins un et au plus un EMPLOYEE (relation 1-1 totale)
 - **EMPLOYEE ||--o{ WORK_SCHEDULE** : un EMPLOYEE a au moins un et plusieurs WORK_SCHEDULE (relation 1-N totale côté employé, optionnelle côté emploi du temps)
 - **EMPLOYEE ||--o{ ATTENDANCE** : un EMPLOYEE a au moins un et plusieurs ATTENDANCE (relation 1-N totale côté employé, optionnelle côté pointage)
 
@@ -181,14 +185,16 @@ Les attributs clés (`PK`, `FK`, `UK`) sont indiqués pour chaque entité.
 
 ```mermaid
 erDiagram
-    USER ||--|| EMPLOYEE : "possède"
+    PROFILE ||--|| EMPLOYEE : "possède"
     EMPLOYEE ||--o{ WORK_SCHEDULE : "travaille selon"
     EMPLOYEE ||--o{ ATTENDANCE : "pointe"
 
-    USER {
+    PROFILE {
         uuid id PK
-        string email UK
         string role
+        string display_name
+        bool is_active
+        timestamp last_login_at
     }
 
     EMPLOYEE {
@@ -230,7 +236,7 @@ erDiagram
 
 | Table            | Contenu                                    |
 |------------------|--------------------------------------------|
-| `users`          | 1 admin, 1 employee                        |
+| `profiles`       | 1 admin, 1 employee                        |
 | `employees`      | Ahmed Benali (admin), Sara Dupont (employee) |
 | `work_schedules` | Ahmed : Lun-Ven 08:00–17:00                |
 |                  | Sara : Lun/Mer/Ven 09:00–18:00, Mar/Jeu 13:00–21:00 |

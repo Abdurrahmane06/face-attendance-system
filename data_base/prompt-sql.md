@@ -35,15 +35,17 @@ Generate a complete SQL file ready to be executed in the **Supabase SQL Editor**
 
 ### Tables to Create
 
-#### 1. `users` — Authentication accounts (linked to Supabase Auth)
-- `id` UUID PRIMARY KEY (linked to Supabase `auth.users`)
-- `email` TEXT UNIQUE NOT NULL
+#### 1. `profiles` — User profiles (linked to Supabase Auth)
+- `id` UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE
 - `role` TEXT CHECK (role IN ('admin', 'employee')) NOT NULL
+- `display_name` TEXT — display name without joining employees
+- `is_active` BOOLEAN DEFAULT true — disable account without soft delete
+- `last_login_at` TIMESTAMPTZ — track last connection
 - tracking columns (created_at, updated_at, deleted_at)
 
 #### 2. `employees` — Employee information
 - `id` UUID PRIMARY KEY
-- `user_id` UUID REFERENCES users(id)
+- `user_id` UUID REFERENCES profiles(id)
 - `first_name` TEXT NOT NULL
 - `last_name` TEXT NOT NULL
 - `phone` TEXT
@@ -82,7 +84,7 @@ Generate a complete SQL file ready to be executed in the **Supabase SQL Editor**
 
 Insert the following:
 
-1. **2 user accounts**:
+1. **2 profile accounts** (IDs must match existing Supabase auth.users):
    - 1 admin: `admin@company.com`
    - 1 employee: `employee@company.com`
 

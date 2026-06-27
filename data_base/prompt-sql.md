@@ -3,8 +3,6 @@
 
 ---
 
-##  English Version
-
 ### Project Context
 
 You are a PostgreSQL and Supabase database expert. I am building a **facial recognition system** to automatically manage employee attendance in a company. The backend uses **FastAPI + Python**, the database is **Supabase (hosted PostgreSQL)**, and facial recognition is handled with `face_recognition` + OpenCV.

@@ -366,8 +366,6 @@ erDiagram
 
 ---
 
----
-
 ## Logique de gestion des absences
 
 ### 1. Détection d'absence (automatique)

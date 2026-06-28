@@ -13,6 +13,7 @@
 5. [Configurer le stockage (Storage)](#5-configurer-le-stockage-storage)
 6. [Configurer les politiques de sécurité (RLS)](#6-configurer-les-politiques-de-sécurité-rls)
 7. [Connecter le backend FastAPI](#7-connecter-le-backend-fastapi)
+8. [Gestion des justificatifs d'absence](#8-gestion-des-justificatifs-dabsence)
 
 ---
 
@@ -74,12 +75,14 @@ service_role key : eyJhbGciOiJIUzI1NiIsInR5cCI6Ik... (clé secrète — à ne JA
 
 ### 3.3 Vérifier les tables
 
-Après exécution, allez dans **Table Editor** pour vérifier que les 4 tables ont bien été créées :
+Après exécution, allez dans **Table Editor** pour vérifier que les 6 tables ont bien été créées :
 
 - `profiles`
 - `work_schedules`
 - `employees`
 - `attendance`
+- `absence_types`
+- `justifications`
 
 Ouvrez chaque table pour confirmer la présence des données de test.
 
@@ -160,7 +163,39 @@ WITH CHECK (
 );
 ```
 
-### 5.3 URL de stockage
+### 5.3 Bucket pour les justificatifs
+
+Créez un deuxième bucket pour stocker les scans des justificatifs d'absence :
+
+1. Allez dans **Storage**.
+2. Cliquez sur **Create bucket**.
+3. **Name** : `absence-justificatifs`
+4. **Public bucket** : décochez (privé — recommandé).
+5. Cliquez sur **Create bucket**.
+
+Politique pour le bucket `absence-justificatifs` :
+
+```sql
+-- Lecture : seuls les admins peuvent voir les justificatifs
+CREATE POLICY "Les admins peuvent lire les justificatifs"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (
+    bucket_id = 'absence-justificatifs'
+    AND (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
+);
+
+-- Écriture : seuls les admins peuvent uploader
+CREATE POLICY "Les admins peuvent uploader les justificatifs"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (
+    bucket_id = 'absence-justificatifs'
+    AND (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
+);
+```
+
+### 5.4 URL de stockage
 
 Les photos seront accessibles via l'URL :
 
@@ -180,7 +215,7 @@ https://[REF-PROJET].supabase.co/storage/v1/object/authenticated/attendance-phot
 
 ### 6.1 Activer RLS sur chaque table
 
-Pour chaque table (`profiles`, `work_schedules`, `employees`, `attendance`) :
+Pour chaque table (`profiles`, `work_schedules`, `employees`, `attendance`, `absence_types`, `justifications`) :
 
 1. Allez dans **Table Editor**.
 2. Sélectionnez la table.
@@ -262,6 +297,41 @@ WITH CHECK (
     employee_id IN (SELECT id FROM employees WHERE user_id = auth.uid())
     OR (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
 );
+
+-- ========================
+-- Absence Types
+-- ========================
+CREATE POLICY "Lecture types absence"
+ON absence_types FOR SELECT
+TO authenticated
+USING (TRUE);
+
+-- ========================
+-- Justifications
+-- ========================
+-- Lecture : un employé voit ses propres justificatifs ; les admins voient tout
+CREATE POLICY "Lecture justificatifs"
+ON justifications FOR SELECT
+TO authenticated
+USING (
+    employee_id IN (SELECT id FROM employees WHERE user_id = auth.uid())
+    OR (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
+);
+
+-- Insertion/modification : seul un admin peut gérer les justificatifs
+CREATE POLICY "Gestion justificatifs"
+ON justifications FOR INSERT
+TO authenticated
+WITH CHECK (
+    (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
+);
+
+CREATE POLICY "Modification justificatifs"
+ON justifications FOR UPDATE
+TO authenticated
+USING (
+    (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
+);
 ```
 
 ---
@@ -315,14 +385,92 @@ response = supabase.table("attendance").insert({
 
 ---
 
+## 8. Gestion des justificatifs d'absence
+
+### 8.1 Principe
+
+L'employé remet un justificatif papier à l'admin → l'admin le saisit dans le système.
+
+### 8.2 Flux de saisie
+
+1. L'admin se connecte et va dans l'interface "Justifier une absence"
+2. Il sélectionne :
+   - L'employé concerné
+   - La ou les dates d'absence
+   - Le type d'absence (Maladie, Congé payé, Motif familial, Formation, Autre)
+   - Le fichier scan du justificatif (uploadé dans le bucket `absence-justificatifs`)
+3. Il valide → le système :
+   - Crée un enregistrement dans `justifications`
+   - Marque `justified = TRUE` dans `attendance` pour les dates concernées
+   - Lie l'enregistrement via `justification_id`
+
+### 8.3 Exemple d'insertion par l'admin
+
+```sql
+-- 1. Créer le justificatif
+INSERT INTO justifications (id, employee_id, absence_type_id, start_date, end_date, document_url, note, created_by)
+VALUES (
+    gen_random_uuid(),
+    'UUID-DE-L-EMPLOYE',
+    'UUID-DU-TYPE-ABSENCE',  -- ex: Maladie
+    '2026-06-26', '2026-06-26',
+    'https://[REF-PROJET].supabase.co/storage/v1/object/authenticated/absence-justificatifs/scan-abs.pdf',
+    'Certificat médical fourni',
+    'UUID-DE-L-ADMIN'
+);
+
+-- 2. Marquer l'attendance comme justifiée
+UPDATE attendance
+SET justified = TRUE,
+    justification_id = 'UUID-DU-JUSTIFICATIF-CREE'
+WHERE employee_id = 'UUID-DE-L-EMPLOYE'
+  AND date = '2026-06-26';
+```
+
+### 8.4 API backend (exemple)
+
+```python
+@router.post("/justifications")
+def create_justification(
+    employee_id: str,
+    absence_type_id: str,
+    start_date: str,
+    end_date: str,
+    file: UploadFile,
+    db: Session
+):
+    # Upload du fichier vers Supabase Storage
+    file_url = upload_to_storage(file, "absence-justificatifs")
+    
+    # Création du justificatif
+    justif = supabase.table("justifications").insert({
+        "employee_id": employee_id,
+        "absence_type_id": absence_type_id,
+        "start_date": start_date,
+        "end_date": end_date,
+        "document_url": file_url,
+        "created_by": get_current_admin().id
+    }).execute()
+    
+    # Marquage des absences comme justifiées
+    supabase.table("attendance").update({
+        "justified": True,
+        "justification_id": justif.data[0]["id"]
+    }).eq("employee_id", employee_id).gte("date", start_date).lte("date", end_date).execute()
+```
+
+---
+
 ## Annexe : Commandes utiles
 
 ### Reset complet de la base
 
 ```sql
+DROP TABLE IF EXISTS justifications CASCADE;
 DROP TABLE IF EXISTS attendance CASCADE;
 DROP TABLE IF EXISTS employees CASCADE;
 DROP TABLE IF EXISTS work_schedules CASCADE;
+DROP TABLE IF EXISTS absence_types CASCADE;
 DROP TABLE IF EXISTS profiles CASCADE;
 ```
 

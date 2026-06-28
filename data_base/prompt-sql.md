@@ -11,7 +11,7 @@ You are a PostgreSQL and Supabase database expert. I am building a **facial reco
 
 Generate a complete SQL file ready to be executed in the **Supabase SQL Editor**, containing:
 
-1. **All table creation statements** (with constraints, foreign keys, etc.)
+1. **All table creation statements** (6 tables: profiles, work_schedules, employees, attendance, absence_types, justifications — with constraints, foreign keys, etc.)
 2. **Realistic test data** (INSERT INTO)
 3. **Performance indexes** on the most frequently queried columns
 
@@ -84,8 +84,33 @@ Generate a complete SQL file ready to be executed in the **Supabase SQL Editor**
 - `late_minutes` INTEGER DEFAULT 0
 - `worked_hours` NUMERIC(5,2) DEFAULT 0
 - `note` TEXT — optional remark
+- `justified` BOOLEAN DEFAULT FALSE — marked as justified by admin
+- `justification_id` UUID REFERENCES justifications(id) — link to justification record
 - tracking columns
 - UNIQUE(employee_id, date) — one record per employee per day
+
+---
+
+#### 5. `absence_types` — Absence categories
+- `id` UUID PRIMARY KEY
+- `name` TEXT NOT NULL UNIQUE — e.g. "Maladie", "Congé payé"
+- `requires_doc` BOOLEAN DEFAULT FALSE — whether a document is needed
+- `is_paid` BOOLEAN DEFAULT TRUE — whether absence is paid
+- tracking columns
+
+#### 6. `justifications` — Absence justifications (admin-managed)
+> Employee gives a paper document to the admin → admin enters it into the system with document scan.
+
+- `id` UUID PRIMARY KEY
+- `employee_id` UUID NOT NULL REFERENCES employees(id)
+- `absence_type_id` UUID NOT NULL REFERENCES absence_types(id)
+- `start_date` DATE NOT NULL — start of absence period
+- `end_date` DATE NOT NULL — end of absence period
+- `document_url` TEXT — URL of scanned document in Supabase Storage
+- `note` TEXT — admin comment
+- `created_by` UUID NOT NULL REFERENCES profiles(id) — the admin who entered it
+- tracking columns
+- CHECK (end_date >= start_date)
 
 ---
 
@@ -112,9 +137,15 @@ Insert the following:
    - Sara: assigned to 'Flex Semaine'
 
 5. **Attendance records** (last 5 working days):
-   - Ahmed: 3 days on time, 1 day late (12 min), 1 day absent
+   - Ahmed: 3 days on time, 1 day late (12 min), 1 day absent (justified with medical certificate)
    - Sara: 4 days present, 1 day absent
    - Include realistic `check_in` / `check_out` timestamps with calculated `worked_hours`
+
+6. **Absence types** (5 types):
+   - Maladie, Congé payé, Motif familial, Formation, Autre
+
+7. **Justifications** (1 justification):
+   - Ahmed's absence on Fri 26 → justified with "Maladie", document_url pointing to Supabase Storage
 
 ---
 
@@ -126,6 +157,9 @@ Create indexes on:
 - `attendance(employee_id, date)`
 - `attendance(date)` — for daily reports
 - `attendance(status)` — for filtering by status
+- `attendance(justified)` — partial index WHERE justified = TRUE
+- `justifications(employee_id)`
+- `justifications(start_date, end_date)` — for period queries
 
 ---
 

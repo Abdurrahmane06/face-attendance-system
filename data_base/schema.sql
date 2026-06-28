@@ -69,10 +69,39 @@ CREATE TABLE attendance (
     late_minutes    INTEGER DEFAULT 0,
     worked_hours    NUMERIC(5,2) DEFAULT 0,
     note            TEXT,
+    justified       BOOLEAN DEFAULT FALSE,
+    justification_id UUID REFERENCES justifications(id),
     created_at      TIMESTAMPTZ DEFAULT now(),
     updated_at      TIMESTAMPTZ DEFAULT now(),
     deleted_at      TIMESTAMPTZ DEFAULT NULL,
     UNIQUE(employee_id, date)
+);
+
+-- 5. absence_types — predefined absence categories
+CREATE TABLE absence_types (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name            TEXT NOT NULL UNIQUE,
+    requires_doc    BOOLEAN DEFAULT FALSE,
+    is_paid         BOOLEAN DEFAULT TRUE,
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now(),
+    deleted_at      TIMESTAMPTZ DEFAULT NULL
+);
+
+-- 6. justifications — absence justifications managed by admin
+CREATE TABLE justifications (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    employee_id     UUID NOT NULL REFERENCES employees(id),
+    absence_type_id UUID NOT NULL REFERENCES absence_types(id),
+    start_date      DATE NOT NULL,
+    end_date        DATE NOT NULL,
+    document_url    TEXT,
+    note            TEXT,
+    created_by      UUID NOT NULL REFERENCES profiles(id),
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now(),
+    deleted_at      TIMESTAMPTZ DEFAULT NULL,
+    CHECK (end_date >= start_date)
 );
 
 -- === DATA ===
@@ -228,6 +257,33 @@ VALUES
         'absent', 0, 0.00
     );
 
+-- Absence types
+INSERT INTO absence_types (id, name, requires_doc, is_paid) VALUES
+    ('f1eebc99-9c0b-4ef8-bb6d-6bb9bd380a01', 'Maladie',          TRUE,  TRUE),
+    ('f1eebc99-9c0b-4ef8-bb6d-6bb9bd380a02', 'Congé payé',       FALSE, TRUE),
+    ('f1eebc99-9c0b-4ef8-bb6d-6bb9bd380a03', 'Motif familial',   TRUE,  TRUE),
+    ('f1eebc99-9c0b-4ef8-bb6d-6bb9bd380a04', 'Formation',        FALSE, TRUE),
+    ('f1eebc99-9c0b-4ef8-bb6d-6bb9bd380a05', 'Autre',            FALSE, FALSE);
+
+-- Justifications — Ahmed a fourni un certificat pour son absence du 26 juin
+INSERT INTO justifications (id, employee_id, absence_type_id, start_date, end_date, document_url, note, created_by)
+VALUES (
+    'f2eebc99-9c0b-4ef8-bb6d-6bb9bd380a01',
+    'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13',
+    'f1eebc99-9c0b-4ef8-bb6d-6bb9bd380a01',
+    '2026-06-26', '2026-06-26',
+    'https://storage.supabase.co/justificatifs/ahmed-certificat-26-06.pdf',
+    'Certificat médical fourni',
+    'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'
+);
+
+-- Lier la justification à l'enregistrement attendance correspondant
+UPDATE attendance
+SET justified = TRUE,
+    justification_id = 'f2eebc99-9c0b-4ef8-bb6d-6bb9bd380a01'
+WHERE employee_id = 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13'
+  AND date = '2026-06-26';
+
 -- === INDEXES ===
 
 CREATE INDEX idx_employees_user_id          ON employees (user_id);
@@ -235,3 +291,6 @@ CREATE INDEX idx_employees_schedule_id      ON employees (schedule_id);
 CREATE INDEX idx_attendance_emp_date        ON attendance (employee_id, date);
 CREATE INDEX idx_attendance_date            ON attendance (date);
 CREATE INDEX idx_attendance_status          ON attendance (status);
+CREATE INDEX idx_attendance_justified       ON attendance (justified) WHERE justified = TRUE;
+CREATE INDEX idx_justifications_employee    ON justifications (employee_id);
+CREATE INDEX idx_justifications_dates       ON justifications (start_date, end_date);

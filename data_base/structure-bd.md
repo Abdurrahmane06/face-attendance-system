@@ -35,7 +35,7 @@ Cette table stocke les profils des comptes utilisateur, liés directement à l'a
 
 ### 2. `employees` — Informations des employés
 
-Cette table contient les informations personnelles et biométriques des employés. Chaque employé est lié à un profil via la clé étrangère `user_id` (relation 1-1). Le champ `face_encoding` stocke le vecteur facial sérialisé (en base64 ou JSON) produit par la librairie `face_recognition` — c'est ce vecteur qui permet d'identifier l'employé lors du pointage par caméra. `photo_url` pointe vers l'image stockée dans Supabase Storage.
+Cette table contient les informations personnelles et biométriques des employés. Chaque employé est lié à un profil via la clé étrangère `user_id` (relation 1-1). Le champ `face_encoding` stocke le vecteur facial sérialisé (en base64 ou JSON) produit par la librairie `face_recognition` — c'est ce vecteur qui permet d'identifier l'employé lors du pointage par caméra. `photo_url` pointe vers l'image stockée dans Supabase Storage. La colonne `schedule_id` lie l'employé à son planning hebdomadaire (relation N:1 avec `work_schedules`).
 
 | Colonne         | Type                  | Contraintes                        |
 |-----------------|-----------------------|------------------------------------|
@@ -46,47 +46,43 @@ Cette table contient les informations personnelles et biométriques des employé
 | `phone`         | TEXT                  |                                    |
 | `photo_url`     | TEXT                  | URL photo stockée Supabase Storage |
 | `face_encoding` | TEXT                  | Vecteur facial sérialisé           |
+| `schedule_id`   | UUID                  | NOT NULL, FK → `work_schedules(id)` |
 | `created_at`    | TIMESTAMPTZ           | DEFAULT `now()`                    |
 | `updated_at`    | TIMESTAMPTZ           | DEFAULT `now()`                    |
 | `deleted_at`    | TIMESTAMPTZ           | DEFAULT NULL                       |
 
 ---
 
-### 3. `work_schedules` — Modèles d'horaires (templates)
+### 3. `work_schedules` — Plannings hebdomadaires
 
-Cette table définit des **modèles d'horaires** réutilisables (ex: "Standard Lundi 08:00–17:00", "Flex Mardi 13:00–21:00"). Ces modèles sont **partagés** entre plusieurs employés via la table de liaison `employee_schedules`. Le champ `label` permet d'identifier chaque modèle. Si `is_working_day` est `FALSE`, le créneau représente un jour de repos. L'unicité est portée par l'`id`.
+Cette table définit des **plannings hebdomadaires complets** (ex: "Standard Semaine 08:00–17:00 du lundi au vendredi"). Chaque ligne décrit les horaires pour les 7 jours de la semaine. Les colonnes `*_start` / `*_end` sont NULL pour les jours non travaillés. Un employé se voit attribuer un seul planning via la colonne `schedule_id` de la table `employees`.
 
-| Colonne              | Type                  | Contraintes                                       |
-|----------------------|-----------------------|---------------------------------------------------|
-| `id`                 | UUID                  | PK                                                |
-| `day_of_week`        | INTEGER               | NOT NULL, CHECK(0–6) — 0=Lundi, 6=Dimanche        |
-| `start_time`         | TIME                  | NOT NULL                                          |
-| `end_time`           | TIME                  | NOT NULL                                          |
-| `grace_period_minutes` | INTEGER             | DEFAULT 10 — tolérance de retard en minutes       |
-| `is_working_day`     | BOOLEAN               | DEFAULT TRUE — FALSE si repos                     |
-| `label`              | TEXT                  | Libellé du modèle (ex: "Standard Lundi")          |
-| `created_at`         | TIMESTAMPTZ           | DEFAULT `now()`                                   |
-| `updated_at`         | TIMESTAMPTZ           | DEFAULT `now()`                                   |
-| `deleted_at`         | TIMESTAMPTZ           | DEFAULT NULL                                      |
-
----
-
-### 4. `employee_schedules` — Liaison employés ↔ modèles d'horaires
-
-Cette table de liaison (junction) réalise la relation **N:N** entre `employees` et `work_schedules`. Un employé peut avoir plusieurs modèles d'horaires (un par jour de la semaine), et un même modèle peut être assigné à plusieurs employés. Cela évite la duplication de données : le modèle "Standard Lundi 08:00–17:00" est créé une seule fois dans `work_schedules` et réutilisé pour tous les employés qui travaillent selon ce créneau.
-
-| Colonne        | Type                  | Contraintes                        |
-|----------------|-----------------------|------------------------------------|
-| `id`           | UUID                  | PK                                 |
-| `employee_id`  | UUID                  | FK → `employees(id)`               |
-| `schedule_id`  | UUID                  | FK → `work_schedules(id)`          |
-| `created_at`   | TIMESTAMPTZ           | DEFAULT `now()`                    |
-| `updated_at`   | TIMESTAMPTZ           | DEFAULT `now()`                    |
-| `deleted_at`   | TIMESTAMPTZ           | DEFAULT NULL                       |
+| Colonne              | Type                  | Contraintes                                    |
+|----------------------|-----------------------|------------------------------------------------|
+| `id`                 | UUID                  | PK                                             |
+| `name`               | TEXT                  | NOT NULL — nom du planning                     |
+| `monday_start`       | TIME                  | NULL si repos                                  |
+| `monday_end`         | TIME                  | NULL si repos                                  |
+| `tuesday_start`      | TIME                  | NULL si repos                                  |
+| `tuesday_end`        | TIME                  | NULL si repos                                  |
+| `wednesday_start`    | TIME                  | NULL si repos                                  |
+| `wednesday_end`      | TIME                  | NULL si repos                                  |
+| `thursday_start`     | TIME                  | NULL si repos                                  |
+| `thursday_end`       | TIME                  | NULL si repos                                  |
+| `friday_start`       | TIME                  | NULL si repos                                  |
+| `friday_end`         | TIME                  | NULL si repos                                  |
+| `saturday_start`     | TIME                  | NULL si repos                                  |
+| `saturday_end`       | TIME                  | NULL si repos                                  |
+| `sunday_start`       | TIME                  | NULL si repos                                  |
+| `sunday_end`         | TIME                  | NULL si repos                                  |
+| `grace_period_minutes` | INTEGER             | DEFAULT 10 — tolérance de retard en minutes    |
+| `created_at`         | TIMESTAMPTZ           | DEFAULT `now()`                                |
+| `updated_at`         | TIMESTAMPTZ           | DEFAULT `now()`                                |
+| `deleted_at`         | TIMESTAMPTZ           | DEFAULT NULL                                   |
 
 ---
 
-### 5. `attendance` — Pointages quotidiens
+### 4. `attendance` — Pointages quotidiens
 
 Cette table enregistre les pointages d'entrée et de sortie de chaque employé pour chaque jour. La contrainte `UNIQUE(employee_id, date)` garantit qu'il ne peut y avoir qu'un seul enregistrement par employé et par jour. Le `status` est calculé automatiquement (ou saisi) selon l'heure d'arrivée par rapport à l'horaire prévu dans `work_schedules` : `present` si dans les temps (ou pendant la grâce), `late` si au-delà, `absent` si pas de pointage. Les champs `late_minutes` et `worked_hours` sont dérivés des timestamps `check_in`/`check_out`.
 
@@ -114,8 +110,7 @@ Cette table enregistre les pointages d'entrée et de sortie de chaque employé p
 | Index                         | Table                 | Colonnes                       |
 |-------------------------------|-----------------------|--------------------------------|
 | `idx_employees_user_id`       | `employees`           | `user_id`                      |
-| `idx_employee_schedules_emp`  | `employee_schedules`  | `employee_id`                  |
-| `idx_employee_schedules_sched`| `employee_schedules`  | `schedule_id`                  |
+| `idx_employees_schedule_id`   | `employees`           | `schedule_id`                  |
 | `idx_attendance_emp_date`     | `attendance`          | `employee_id`, `date`          |
 | `idx_attendance_date`         | `attendance`          | `date`                         |
 | `idx_attendance_status`       | `attendance`          | `status`                       |
@@ -128,7 +123,7 @@ Cette table enregistre les pointages d'entrée et de sortie de chaque employé p
 
 Ce diagramme représente la structure statique du système sous forme de classes avec leurs attributs et relations. Chaque classe correspond à une table de la base de données. Les attributs sont typés (UUID, String, Timestamp, etc.) et la visibilité est privée (`-`). Les relations indiquent les cardinalités :
 - **Profile 1 → 1 Employee** : un profil possède un et un seul employé
-- **Employee 1 → N EmployeeSchedule ← N WorkSchedule** : relation N:N entre employés et modèles d'horaires via la classe de liaison `EmployeeSchedule`
+- **WorkSchedule 1 → N Employee** : un planning hebdomadaire peut être assigné à plusieurs employés
 - **Employee 1 → N Attendance** : un employé a plusieurs pointages (un par jour travaillé)
 
 ```mermaid
@@ -152,6 +147,7 @@ classDiagram
         -String phone
         -String photo_url
         -String face_encoding
+        -UUID schedule_id
         -Timestamp created_at
         -Timestamp updated_at
         -Timestamp deleted_at
@@ -159,21 +155,22 @@ classDiagram
 
     class WorkSchedule {
         -UUID id
-        -int day_of_week
-        -Time start_time
-        -Time end_time
+        -String name
+        -Time monday_start
+        -Time monday_end
+        -Time tuesday_start
+        -Time tuesday_end
+        -Time wednesday_start
+        -Time wednesday_end
+        -Time thursday_start
+        -Time thursday_end
+        -Time friday_start
+        -Time friday_end
+        -Time saturday_start
+        -Time saturday_end
+        -Time sunday_start
+        -Time sunday_end
         -int grace_period_minutes
-        -bool is_working_day
-        -String label
-        -Timestamp created_at
-        -Timestamp updated_at
-        -Timestamp deleted_at
-    }
-
-    class EmployeeSchedule {
-        -UUID id
-        -UUID employee_id
-        -UUID schedule_id
         -Timestamp created_at
         -Timestamp updated_at
         -Timestamp deleted_at
@@ -195,8 +192,7 @@ classDiagram
     }
 
     Profile "1" --> "1" Employee : possède
-    Employee "1" --> "N" EmployeeSchedule : a
-    WorkSchedule "1" --> "N" EmployeeSchedule : assigné à
+    WorkSchedule "1" --> "N" Employee : assigné à
     Employee "1" --> "N" Attendance : pointe
 ```
 
@@ -204,17 +200,15 @@ classDiagram
 
 Ce diagramme conceptuel (indépendant de toute implémentation technique) décrit les entités et leurs relations selon la notation Merise (Pascal Chen). Les cardinalités se lisent comme suit :
 - **PROFILE ||--|| EMPLOYEE** : un PROFILE a au moins un et au plus un EMPLOYEE (relation 1-1 totale)
-- **EMPLOYEE ||--o{ EMPLOYEE_SCHEDULE** : un EMPLOYEE peut avoir plusieurs assignations d'horaires
-- **WORK_SCHEDULE ||--o{ EMPLOYEE_SCHEDULE** : un WORK_SCHEDULE peut être assigné à plusieurs employés
-- **EMPLOYEE ||--o{ ATTENDANCE** : un EMPLOYEE a au moins un et plusieurs ATTENDANCE (relation 1-N totale côté employé, optionnelle côté pointage)
+- **WORK_SCHEDULE ||--o{ EMPLOYEE** : un WORK_SCHEDULE peut être assigné à plusieurs employés (relation 1-N)
+- **EMPLOYEE ||--o{ ATTENDANCE** : un EMPLOYEE a plusieurs ATTENDANCE (relation 1-N totale côté employé, optionnelle côté pointage)
 
 Les attributs clés (`PK`, `FK`, `UK`) sont indiqués pour chaque entité.
 
 ```mermaid
 erDiagram
     PROFILE ||--|| EMPLOYEE : "possède"
-    EMPLOYEE ||--o{ EMPLOYEE_SCHEDULE : "a"
-    WORK_SCHEDULE ||--o{ EMPLOYEE_SCHEDULE : "assigné à"
+    WORK_SCHEDULE ||--o{ EMPLOYEE : "assigné à"
     EMPLOYEE ||--o{ ATTENDANCE : "pointe"
 
     PROFILE {
@@ -233,22 +227,27 @@ erDiagram
         string phone
         string photo_url
         string face_encoding
+        uuid schedule_id FK
     }
 
     WORK_SCHEDULE {
         uuid id PK
-        int day_of_week
-        time start_time
-        time end_time
+        string name
+        time monday_start
+        time monday_end
+        time tuesday_start
+        time tuesday_end
+        time wednesday_start
+        time wednesday_end
+        time thursday_start
+        time thursday_end
+        time friday_start
+        time friday_end
+        time saturday_start
+        time saturday_end
+        time sunday_start
+        time sunday_end
         int grace_period_minutes
-        bool is_working_day
-        string label
-    }
-
-    EMPLOYEE_SCHEDULE {
-        uuid id PK
-        uuid employee_id FK
-        uuid schedule_id FK
     }
 
     ATTENDANCE {
@@ -271,7 +270,6 @@ erDiagram
 | Table                | Contenu                                                  |
 |----------------------|----------------------------------------------------------|
 | `profiles`           | 1 admin, 1 employee                                      |
-| `employees`          | Ahmed Benali (admin), Sara Dupont (employee)              |
-| `work_schedules`     | 14 modèles : Standard (Lun-Ven 08:00–17:00 + WE), Flex (Lun-Ven 09:00–18:00 / Mar-Jeu 13:00–21:00 + WE) |
-| `employee_schedules` | Ahmed → 7 modèles Standard, Sara → 7 modèles Flex       |
+| `work_schedules`     | 2 plannings hebdomadaires : Standard (08:00–17:00), Flex (09:00–18:00 / 13:00–21:00) |
+| `employees`          | Ahmed Benali → Standard, Sara Dupont → Flex              |
 | `attendance`         | 5 derniers jours ouvrés pour chaque employé              |

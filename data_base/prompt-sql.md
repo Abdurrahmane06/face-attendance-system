@@ -49,29 +49,32 @@ Generate a complete SQL file ready to be executed in the **Supabase SQL Editor**
 - `phone` TEXT
 - `photo_url` TEXT — URL to photo stored in Supabase Storage
 - `face_encoding` TEXT — serialized face vector (JSON/base64)
+- `schedule_id` UUID NOT NULL REFERENCES work_schedules(id) — assigned weekly schedule
 - tracking columns
 
-#### 3. `work_schedules` — Schedule templates (shared across employees)
-> Reusable schedule templates (e.g. "Standard Monday 08:00–17:00"). Templates are assigned to employees via the N:N junction table `employee_schedules`.
+#### 3. `work_schedules` — Weekly schedule templates
+> Each row represents a full weekly schedule (e.g. "Standard Week 08:00-17:00 Mon-Fri"). An employee is assigned a single schedule via `employees.schedule_id`. NULL start/end time means non-working day.
 
 - `id` UUID PRIMARY KEY
-- `day_of_week` INTEGER CHECK (day_of_week BETWEEN 0 AND 6) — 0=Monday, 6=Sunday
-- `start_time` TIME NOT NULL
-- `end_time` TIME NOT NULL
+- `name` TEXT NOT NULL — human-readable name (e.g. "Standard Week")
+- `monday_start` TIME — start time Monday (NULL if off)
+- `monday_end` TIME — end time Monday
+- `tuesday_start` TIME
+- `tuesday_end` TIME
+- `wednesday_start` TIME
+- `wednesday_end` TIME
+- `thursday_start` TIME
+- `thursday_end` TIME
+- `friday_start` TIME
+- `friday_end` TIME
+- `saturday_start` TIME
+- `saturday_end` TIME
+- `sunday_start` TIME
+- `sunday_end` TIME
 - `grace_period_minutes` INTEGER DEFAULT 10 — lateness tolerance in minutes
-- `is_working_day` BOOLEAN DEFAULT true — FALSE if the employee is off that day
-- `label` TEXT — human-readable name (e.g. "Standard Monday")
 - tracking columns
 
-#### 4. `employee_schedules` — N:N junction between employees and work_schedules
-> Links employees to their assigned schedule templates. An employee can have multiple templates (one per day), and a template can be shared by many employees.
-
-- `id` UUID PRIMARY KEY
-- `employee_id` UUID REFERENCES employees(id)
-- `schedule_id` UUID REFERENCES work_schedules(id)
-- tracking columns
-
-#### 5. `attendance` — Daily check-in / check-out records
+#### 4. `attendance` — Daily check-in / check-out records
 - `id` UUID PRIMARY KEY
 - `employee_id` UUID REFERENCES employees(id)
 - `date` DATE NOT NULL
@@ -100,11 +103,15 @@ Insert the following:
    - Include fake `photo_url` values (e.g. `https://storage.supabase.co/...`)
    - Include fake `face_encoding` values (e.g. short base64 string)
 
-3. **Work schedules**:
-   - Ahmed: Monday to Friday, 08:00 → 17:00, 10 min grace period
-   - Sara: Mon/Wed/Fri 09:00 → 18:00, Tue/Thu 13:00 → 21:00
+3. **Work schedules** (weekly templates):
+   - Standard Semaine: Mon-Fri 08:00→17:00, weekend off, 10 min grace
+   - Flex Semaine: Mon/Wed/Fri 09:00→18:00, Tue/Thu 13:00→21:00, weekend off, 15 min grace
 
-4. **Attendance records** (last 5 working days):
+4. **Employees** (with schedule assignment):
+   - Ahmed: assigned to 'Standard Semaine'
+   - Sara: assigned to 'Flex Semaine'
+
+5. **Attendance records** (last 5 working days):
    - Ahmed: 3 days on time, 1 day late (12 min), 1 day absent
    - Sara: 4 days present, 1 day absent
    - Include realistic `check_in` / `check_out` timestamps with calculated `worked_hours`
@@ -115,8 +122,7 @@ Insert the following:
 
 Create indexes on:
 - `employees(user_id)`
-- `employee_schedules(employee_id)`
-- `employee_schedules(schedule_id)`
+- `employees(schedule_id)`
 - `attendance(employee_id, date)`
 - `attendance(date)` — for daily reports
 - `attendance(status)` — for filtering by status

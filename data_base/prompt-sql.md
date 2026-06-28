@@ -51,19 +51,27 @@ Generate a complete SQL file ready to be executed in the **Supabase SQL Editor**
 - `face_encoding` TEXT — serialized face vector (JSON/base64)
 - tracking columns
 
-#### 3. `work_schedules` — Per-employee, per-day custom schedules
-> Each employee has their own schedule. The same employee can have different hours on different days of the week.
+#### 3. `work_schedules` — Schedule templates (shared across employees)
+> Reusable schedule templates (e.g. "Standard Monday 08:00–17:00"). Templates are assigned to employees via the N:N junction table `employee_schedules`.
 
 - `id` UUID PRIMARY KEY
-- `employee_id` UUID REFERENCES employees(id)
 - `day_of_week` INTEGER CHECK (day_of_week BETWEEN 0 AND 6) — 0=Monday, 6=Sunday
 - `start_time` TIME NOT NULL
 - `end_time` TIME NOT NULL
 - `grace_period_minutes` INTEGER DEFAULT 10 — lateness tolerance in minutes
 - `is_working_day` BOOLEAN DEFAULT true — FALSE if the employee is off that day
+- `label` TEXT — human-readable name (e.g. "Standard Monday")
 - tracking columns
 
-#### 4. `attendance` — Daily check-in / check-out records
+#### 4. `employee_schedules` — N:N junction between employees and work_schedules
+> Links employees to their assigned schedule templates. An employee can have multiple templates (one per day), and a template can be shared by many employees.
+
+- `id` UUID PRIMARY KEY
+- `employee_id` UUID REFERENCES employees(id)
+- `schedule_id` UUID REFERENCES work_schedules(id)
+- tracking columns
+
+#### 5. `attendance` — Daily check-in / check-out records
 - `id` UUID PRIMARY KEY
 - `employee_id` UUID REFERENCES employees(id)
 - `date` DATE NOT NULL
@@ -107,7 +115,8 @@ Insert the following:
 
 Create indexes on:
 - `employees(user_id)`
-- `work_schedules(employee_id, day_of_week)`
+- `employee_schedules(employee_id)`
+- `employee_schedules(schedule_id)`
 - `attendance(employee_id, date)`
 - `attendance(date)` — for daily reports
 - `attendance(status)` — for filtering by status

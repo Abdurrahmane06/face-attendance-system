@@ -74,11 +74,12 @@ service_role key : eyJhbGciOiJIUzI1NiIsInR5cCI6Ik... (clé secrète — à ne JA
 
 ### 3.3 Vérifier les tables
 
-Après exécution, allez dans **Table Editor** pour vérifier que les 4 tables ont bien été créées :
+Après exécution, allez dans **Table Editor** pour vérifier que les 5 tables ont bien été créées :
 
 - `profiles`
 - `employees`
 - `work_schedules`
+- `employee_schedules`
 - `attendance`
 
 Ouvrez chaque table pour confirmer la présence des données de test.
@@ -239,6 +240,16 @@ CREATE POLICY "Lecture horaires"
 ON work_schedules FOR SELECT
 TO authenticated
 USING (
+    TRUE  -- templates are shared, visible to all authenticated users
+);
+
+-- ========================
+-- Employee Schedules
+-- ========================
+CREATE POLICY "Lecture assignations horaires"
+ON employee_schedules FOR SELECT
+TO authenticated
+USING (
     employee_id IN (SELECT id FROM employees WHERE user_id = auth.uid())
     OR (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
 );
@@ -322,6 +333,7 @@ response = supabase.table("attendance").insert({
 
 ```sql
 DROP TABLE IF EXISTS attendance CASCADE;
+DROP TABLE IF EXISTS employee_schedules CASCADE;
 DROP TABLE IF EXISTS work_schedules CASCADE;
 DROP TABLE IF EXISTS employees CASCADE;
 DROP TABLE IF EXISTS profiles CASCADE;

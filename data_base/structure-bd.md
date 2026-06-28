@@ -262,13 +262,13 @@ classDiagram
         -Timestamp deleted_at
     }
 
-    Profile "1" --> "1" Employee : possède
-    WorkSchedule "1" --> "N" Employee : assigné à
+    Profile "1" --> "1" Employee : possede
+    WorkSchedule "1" --> "N" Employee : assigne a
     Employee "1" --> "N" Attendance : pointe
     Employee "1" --> "N" Justification : justifie
-    AbsenceType "1" --> "N" Justification : catégorise
-    Profile "1" --> "N" Justification : créé par
-    Attendance "N" --> "1" Justification : lié à
+    AbsenceType "1" --> "N" Justification : categorise
+    Profile "1" --> "N" Justification : cree par
+    Attendance "N" --> "1" Justification : lie a
 ```
 
 ### Modèle Conceptuel de Données (MCD — Merise)
@@ -285,11 +285,11 @@ Les attributs clés (`PK`, `FK`, `UK`) sont indiqués pour chaque entité.
 
 ```mermaid
 erDiagram
-    PROFILE ||--|| EMPLOYEE : "possède"
-    WORK_SCHEDULE ||--o{ EMPLOYEE : "assigné à"
+    PROFILE ||--|| EMPLOYEE : "possede"
+    WORK_SCHEDULE ||--o{ EMPLOYEE : "assigne a"
     EMPLOYEE ||--o{ ATTENDANCE : "pointe"
     EMPLOYEE ||--o{ JUSTIFICATION : "justifie"
-    ABSENCE_TYPE ||--o{ JUSTIFICATION : "catégorise"
+    ABSENCE_TYPE ||--o{ JUSTIFICATION : "categorise"
     ATTENDANCE o--|| JUSTIFICATION : "lie a"
 
     PROFILE {

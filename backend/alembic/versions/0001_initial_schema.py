@@ -21,14 +21,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # ── Postgres ENUM types ─────────────────────────────────────────────────
-    user_role = postgresql.ENUM("ADMIN", "USER", name="user_role")
-    attendance_status = postgresql.ENUM("present", "late", "absent", name="attendance_status")
-    recognition_method = postgresql.ENUM("FACE", "MANUAL", name="recognition_method")
+    bind = op.get_bind()
 
-    user_role.create(op.get_bind(), checkfirst=True)
-    attendance_status.create(op.get_bind(), checkfirst=True)
-    recognition_method.create(op.get_bind(), checkfirst=True)
+    # ── Postgres ENUM types ─────────────────────────────────────────────────
+    # checkfirst=True works correctly with psycopg2 (see alembic/env.py).
+    postgresql.ENUM("ADMIN", "USER", name="user_role").create(bind, checkfirst=True)
+    postgresql.ENUM("present", "late", "absent", name="attendance_status").create(bind, checkfirst=True)
+    postgresql.ENUM("FACE", "MANUAL", name="recognition_method").create(bind, checkfirst=True)
 
     # ── work_schedules ──────────────────────────────────────────────────────
     op.create_table(
@@ -50,7 +49,7 @@ def upgrade() -> None:
         sa.Column("hashed_password", sa.String(255), nullable=False),
         sa.Column(
             "role",
-            sa.Enum("ADMIN", "USER", name="user_role", create_type=False),
+            postgresql.ENUM(name="user_role", create_type=False),
             nullable=False,
             server_default="USER",
         ),
@@ -113,14 +112,14 @@ def upgrade() -> None:
         sa.Column("check_out", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "status",
-            sa.Enum("present", "late", "absent", name="attendance_status", create_type=False),
+            postgresql.ENUM(name="attendance_status", create_type=False),
             nullable=False,
             server_default="present",
         ),
         sa.Column("late_minutes", sa.Integer(), nullable=True),
         sa.Column(
             "recognized_by",
-            sa.Enum("FACE", "MANUAL", name="recognition_method", create_type=False),
+            postgresql.ENUM(name="recognition_method", create_type=False),
             nullable=False,
             server_default="FACE",
         ),

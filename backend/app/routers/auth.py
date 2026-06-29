@@ -1,7 +1,8 @@
 """Authentication router: register, login, refresh, logout, me, seed-admin.
 
-Public endpoints: /register, /login, /refresh, /seed-admin.
-Protected:        /logout (requires valid access token), /me.
+Public endpoints:     /login, /refresh, /seed-admin.
+Admin-only:           /register (requires valid admin JWT).
+User-authenticated:   /logout, /me.
 """
 
 import logging
@@ -9,7 +10,7 @@ import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db
+from app.core.dependencies import get_current_user, get_db, require_admin
 from app.models.user import User
 from app.schemas.auth import (
     AuthResponse,
@@ -30,10 +31,11 @@ router = APIRouter()
 async def register(
     request: RegisterRequest,
     db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
 ) -> AuthResponse:
-    """Register a new USER account (public).
+    """Create a USER account — admin only.
 
-    Role is always USER — use POST /api/v1/users to create admins.
+    Role is always USER. Prefer POST /api/v1/users for the full admin flow.
     """
     return await auth_service.register_user(db, request)
 

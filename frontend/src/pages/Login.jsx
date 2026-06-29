@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -55,12 +55,6 @@ const Login = () => {
           Se connecter
         </Button>
       </form>
-      <p className="text-center text-sm text-gray-500 mt-6">
-        Pas encore de compte ?{' '}
-        <Link to="/register" className="text-primary-600 hover:underline">
-          S&apos;inscrire
-        </Link>
-      </p>
     </div>
   );
 };

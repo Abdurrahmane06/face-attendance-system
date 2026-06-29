@@ -50,11 +50,11 @@ class AttendanceResponse(BaseModel):
     check_in: Optional[datetime] = None
     check_out: Optional[datetime] = None
     status: str
+    late_minutes: Optional[int] = None
     recognized_by: str
     notes: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class PaginatedAttendanceResponse(BaseModel):

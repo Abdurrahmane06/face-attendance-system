@@ -2,9 +2,9 @@ import React from 'react';
 import Badge from './ui/Badge';
 
 const statusMap = {
-  PRESENT: { label: 'Présent', variant: 'green' },
-  LATE: { label: 'Retard', variant: 'yellow' },
-  ABSENT: { label: 'Absent', variant: 'red' },
+  present: { label: 'Présent', variant: 'green' },
+  late: { label: 'Retard', variant: 'yellow' },
+  absent: { label: 'Absent', variant: 'red' },
 };
 
 const AttendanceTable = ({ records = [] }) => {

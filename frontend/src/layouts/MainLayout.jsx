@@ -3,11 +3,11 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 const navItems = [
-  { to: '/dashboard', label: 'Dashboard', icon: '📊' },
-  { to: '/face-recognition', label: 'Reconnaissance', icon: '📷' },
-  { to: '/attendance', label: 'Pointages', icon: '📋' },
-  { to: '/reports', label: 'Rapports', icon: '📈' },
-  { to: '/users', label: 'Utilisateurs', icon: '👥', adminOnly: true },
+  { to: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: true },
+  { to: '/pointage', label: 'Pointage', icon: '📷' },
+  { to: '/attendance', label: 'Pointages', icon: '📋', adminOnly: true },
+  { to: '/reports', label: 'Rapports', icon: '📈', adminOnly: true },
+  { to: '/employees', label: 'Employés', icon: '👥', adminOnly: true },
 ];
 
 const MainLayout = () => {

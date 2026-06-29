@@ -17,8 +17,8 @@ const Login = () => {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
-      navigate('/dashboard');
+      const loggedIn = await login(email, password);
+      navigate(loggedIn?.role === 'ADMIN' ? '/dashboard' : '/pointage');
     } catch (err) {
       setError(err.response?.data?.detail || 'Échec de la connexion');
     } finally {

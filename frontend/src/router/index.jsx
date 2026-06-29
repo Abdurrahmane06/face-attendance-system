@@ -12,14 +12,27 @@ import Attendance from '../pages/Attendance';
 import FaceRecognition from '../pages/FaceRecognition';
 import Reports from '../pages/Reports';
 import NotFound from '../pages/NotFound';
+import { useAuth } from '../hooks/useAuth';
+import Spinner from '../components/ui/Spinner';
+
+// Redirect to the appropriate home page based on role.
+const RoleRedirect = () => {
+  const { user, loading } = useAuth();
+  if (loading) return <Spinner />;
+  if (!user) return <Navigate to="/login" replace />;
+  return <Navigate to={user.role === 'ADMIN' ? '/dashboard' : '/pointage'} replace />;
+};
 
 const AppRouter = () => {
   return (
     <Routes>
+      {/* ── Public auth pages ───────────────────────────────── */}
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
       </Route>
+
+      {/* ── Any authenticated user ───────────────────────────── */}
       <Route
         element={
           <ProtectedRoute>
@@ -27,11 +40,10 @@ const AppRouter = () => {
           </ProtectedRoute>
         }
       >
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/face-recognition" element={<FaceRecognition />} />
-        <Route path="/attendance" element={<Attendance />} />
-        <Route path="/reports" element={<Reports />} />
+        <Route path="/pointage" element={<FaceRecognition />} />
       </Route>
+
+      {/* ── Admin-only pages ─────────────────────────────────── */}
       <Route
         element={
           <ProtectedRoute requiredRole="ADMIN">
@@ -39,10 +51,15 @@ const AppRouter = () => {
           </ProtectedRoute>
         }
       >
-        <Route path="/users" element={<Users />} />
-        <Route path="/users/:id" element={<UserDetail />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/employees" element={<Users />} />
+        <Route path="/employees/:id" element={<UserDetail />} />
+        <Route path="/attendance" element={<Attendance />} />
+        <Route path="/reports" element={<Reports />} />
       </Route>
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+      {/* ── Default: role-based redirect ─────────────────────── */}
+      <Route path="/" element={<RoleRedirect />} />
       <Route path="/404" element={<NotFound />} />
       <Route path="*" element={<Navigate to="/404" replace />} />
     </Routes>

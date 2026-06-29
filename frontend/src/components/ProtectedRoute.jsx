@@ -9,7 +9,7 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   if (loading) return <Spinner />;
   if (!user) return <Navigate to="/login" replace />;
   if (requiredRole && user.role !== requiredRole) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/pointage" replace />;
   }
 
   return children;

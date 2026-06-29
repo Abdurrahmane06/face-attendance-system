@@ -1,40 +1,21 @@
 import api from './api';
 
-/**
- * Service for face recognition API calls.
- */
+const MULTIPART = { headers: { 'Content-Type': 'multipart/form-data' } };
+
 export const faceService = {
-  /**
-   * Upload a face image to register encoding.
-   * @param {FormData} formData
-   * @returns {Promise}
-   */
-  upload: (formData) =>
-    api.post('/face/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  /** Upload current user's own face encoding. */
+  upload: (formData) => api.post('/face/upload', formData, MULTIPART),
 
-  /**
-   * Recognize a face from an uploaded image.
-   * @param {FormData} formData
-   * @returns {Promise}
-   */
-  recognize: (formData) =>
-    api.post('/face/recognize', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  /** Admin: upload face encoding on behalf of another user. */
+  uploadForUser: (userId, formData) =>
+    api.post(`/face/upload/${userId}`, formData, MULTIPART),
 
-  /**
-   * Get face encodings for a user.
-   * @param {string} userId
-   * @returns {Promise}
-   */
+  /** Match a captured frame against stored encodings. */
+  recognize: (formData) => api.post('/face/recognize', formData, MULTIPART),
+
+  /** List active encodings for a user. */
   getEncodings: (userId) => api.get(`/face/encodings/${userId}`),
 
-  /**
-   * Delete a face encoding.
-   * @param {string} encodingId
-   * @returns {Promise}
-   */
+  /** Soft-delete a face encoding. */
   deleteEncoding: (encodingId) => api.delete(`/face/encodings/${encodingId}`),
 };

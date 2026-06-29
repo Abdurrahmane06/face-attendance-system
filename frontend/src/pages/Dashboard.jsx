@@ -99,16 +99,16 @@ const Dashboard = () => {
                   <td className="py-3">
                     <span
                       className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                        checkin.status === 'PRESENT'
+                        checkin.status === 'present'
                           ? 'bg-green-100 text-green-700'
-                          : checkin.status === 'LATE'
+                          : checkin.status === 'late'
                           ? 'bg-yellow-100 text-yellow-700'
                           : 'bg-red-100 text-red-700'
                       }`}
                     >
-                      {checkin.status === 'PRESENT'
+                      {checkin.status === 'present'
                         ? 'Présent'
-                        : checkin.status === 'LATE'
+                        : checkin.status === 'late'
                         ? 'Retard'
                         : 'Absent'}
                     </span>

@@ -38,8 +38,8 @@ export const AuthProvider = ({ children }) => {
     return response.data.user;
   };
 
-  const register = async (email, fullName, password, role) => {
-    const response = await authService.register(email, fullName, password, role);
+  const register = async (email, fullName, password) => {
+    const response = await authService.register(email, fullName, password);
     const { access_token, refresh_token } = response.data.data;
     localStorage.setItem('access_token', access_token);
     localStorage.setItem('refresh_token', refresh_token);

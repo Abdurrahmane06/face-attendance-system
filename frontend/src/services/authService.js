@@ -4,16 +4,9 @@ import api from './api';
  * Service for authentication API calls.
  */
 export const authService = {
-  /**
-   * Register a new user.
-   * @param {string} email
-   * @param {string} fullName
-   * @param {string} password
-   * @param {string} [role='USER']
-   * @returns {Promise}
-   */
-  register: (email, fullName, password, role = 'USER') =>
-    api.post('/auth/register', { email, full_name: fullName, password, role }),
+  /** Register a new user (backend always assigns USER role). */
+  register: (email, fullName, password) =>
+    api.post('/auth/register', { email, full_name: fullName, password }),
 
   /**
    * Login with email and password.

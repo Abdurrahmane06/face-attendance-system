@@ -1,6 +1,7 @@
-"""Authentication router: register, login, refresh, logout, me.
+"""Authentication router: register, login, refresh, logout, me, seed-admin.
 
-All endpoints are public except /me which requires authentication.
+Public endpoints: /register, /login, /refresh, /seed-admin.
+Protected:        /logout (requires valid access token), /me.
 """
 
 import logging
@@ -15,6 +16,7 @@ from app.schemas.auth import (
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
+    SeedAdminRequest,
     TokenResponse,
     UserInfo,
 )
@@ -25,44 +27,32 @@ router = APIRouter()
 
 
 @router.post("/register", response_model=AuthResponse, status_code=201)
-async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db)) -> AuthResponse:
-    """Register a new user account.
+async def register(
+    request: RegisterRequest,
+    db: AsyncSession = Depends(get_db),
+) -> AuthResponse:
+    """Register a new USER account (public).
 
-    Args:
-        request: Registration details.
-        db: Database session.
-
-    Returns:
-        AuthResponse with JWT tokens and user info.
+    Role is always USER — use POST /api/v1/users to create admins.
     """
     return await auth_service.register_user(db, request)
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)) -> AuthResponse:
-    """Authenticate a user and return JWT tokens.
-
-    Args:
-        request: Login credentials.
-        db: Database session.
-
-    Returns:
-        AuthResponse with JWT tokens and user info.
-    """
+async def login(
+    request: LoginRequest,
+    db: AsyncSession = Depends(get_db),
+) -> AuthResponse:
+    """Authenticate with email + password, receive JWT token pair."""
     return await auth_service.login_user(db, request)
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(request: RefreshRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
-    """Refresh an access token using a valid refresh token.
-
-    Args:
-        request: Refresh token string.
-        db: Database session.
-
-    Returns:
-        TokenResponse with new access token.
-    """
+async def refresh(
+    request: RefreshRequest,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    """Exchange a valid refresh token for a new access token."""
     return await auth_service.refresh_access_token(db, request.refresh_token)
 
 
@@ -72,26 +62,13 @@ async def logout(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    """Revoke a refresh token (logout).
-
-    Args:
-        request: Refresh token to revoke.
-        db: Database session.
-        current_user: Authenticated user.
-    """
+    """Revoke the provided refresh token (logout)."""
     await auth_service.logout_user(db, request.refresh_token)
 
 
 @router.get("/me", response_model=UserInfo)
 async def get_me(current_user: User = Depends(get_current_user)) -> UserInfo:
-    """Get the profile of the currently authenticated user.
-
-    Args:
-        current_user: Authenticated user.
-
-    Returns:
-        UserInfo for the current user.
-    """
+    """Return the profile of the currently authenticated user."""
     return UserInfo(
         id=current_user.id,
         email=current_user.email,
@@ -100,3 +77,22 @@ async def get_me(current_user: User = Depends(get_current_user)) -> UserInfo:
         department=current_user.department,
         is_active=current_user.is_active,
     )
+
+
+@router.post(
+    "/seed-admin",
+    response_model=AuthResponse,
+    status_code=201,
+    summary="Bootstrap first admin (one-time use)",
+    description=(
+        "Creates the very first ADMIN account. "
+        "Returns 409 if an admin already exists. "
+        "Use the default body or supply custom credentials."
+    ),
+)
+async def seed_admin(
+    request: SeedAdminRequest = SeedAdminRequest(),
+    db: AsyncSession = Depends(get_db),
+) -> AuthResponse:
+    """One-time endpoint to create the first admin account."""
+    return await auth_service.create_first_admin(db, request)

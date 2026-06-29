@@ -49,8 +49,8 @@ async def get_dashboard_stats(
     )
     today_records = today_att_result.scalars().all()
 
-    present_today = sum(1 for r in today_records if r.status == "PRESENT")
-    late_today = sum(1 for r in today_records if r.status == "LATE")
+    present_today = sum(1 for r in today_records if r.status == "present")
+    late_today = sum(1 for r in today_records if r.status == "late")
     absent_today = total_users - present_today - late_today
 
     rate_today = round(((present_today + late_today) / total_users * 100), 2) if total_users > 0 else 0
@@ -66,8 +66,8 @@ async def get_dashboard_stats(
 
     for d in week_dates:
         day_records = [r for r in week_records if r.date == d]
-        present = sum(1 for r in day_records if r.status == "PRESENT")
-        late = sum(1 for r in day_records if r.status == "LATE")
+        present = sum(1 for r in day_records if r.status == "present")
+        late = sum(1 for r in day_records if r.status == "late")
         absent = total_users - present - late
         last_7_days.append({
             "date": d.isoformat(),

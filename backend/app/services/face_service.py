@@ -1,10 +1,16 @@
-"""Face recognition service for FaceAttend.
+"""Face recognition service.
 
-Handles face encoding extraction from images, storage in the database,
-and real-time face recognition against stored encodings using
-the face_recognition library (dlib backend).
+Handles face encoding extraction from images, persistence, and real-time
+face matching against the database using the face_recognition library (dlib).
+
+Key design decisions:
+- load_image_file() receives io.BytesIO, not raw bytes (PIL requires file-like object).
+- Encodings are fetched with joinedload(user) to avoid lazy-load errors in async.
+- A parallel list tracks valid encodings so skipped rows don't shift indices.
+- Deleted encodings (deleted_at IS NOT NULL) are excluded from recognition.
 """
 
+import io
 import json
 import logging
 import os
@@ -14,23 +20,7 @@ from typing import List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-def _get_face_recognition():
-    try:
-        import face_recognition
-        return face_recognition
-    except ImportError:
-        raise HTTPException(
-            status_code=503,
-            detail="Le module face_recognition n'est pas installé. Veuillez contacter l'administrateur.",
-        )
-
-def _get_numpy():
-    try:
-        import numpy as np
-        return np
-    except ImportError:
-        raise HTTPException(status_code=503, detail="Module numpy manquant.")
+from sqlalchemy.orm import joinedload
 
 from app.core.config import settings
 from app.models.face_encoding import FaceEncoding
@@ -44,45 +34,71 @@ from app.schemas.face import (
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Lazy imports — face_recognition / numpy are optional in test environments
+# ---------------------------------------------------------------------------
+
+def _get_face_recognition():
+    try:
+        import face_recognition
+        return face_recognition
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="face_recognition module not installed. Contact the administrator.",
+        )
+
+
+def _get_numpy():
+    try:
+        import numpy as np
+        return np
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="numpy module not installed.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
 async def extract_encoding(image_bytes: bytes) -> List[float]:
-    """Extract a 128-dimensional face encoding from image bytes.
-
-    Args:
-        image_bytes: Raw image file bytes (JPEG or PNG).
-
-    Returns:
-        List of 128 float values representing the face encoding.
+    """Extract a 128-D face encoding from raw image bytes.
 
     Raises:
-        HTTPException 400: If no face or multiple faces are detected,
-                          or if the image is invalid.
+        HTTPException 400: No face detected, multiple faces, or invalid image.
     """
     face_recognition = _get_face_recognition()
+
     try:
-        image = face_recognition.load_image_file(image_bytes)
+        # PIL (used internally by face_recognition) requires a file-like object
+        image = face_recognition.load_image_file(io.BytesIO(image_bytes))
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid image file: {str(exc)}",
+            detail=f"Invalid image file: {exc}",
         )
 
     face_locations = face_recognition.face_locations(image)
+
     if len(face_locations) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No face detected in the image. Please upload a photo with a clear face.",
+            detail="No face detected. Upload a photo with a single, clearly visible face.",
         )
     if len(face_locations) > 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Multiple faces detected. Please upload a photo with exactly one face.",
+            detail=f"{len(face_locations)} faces detected. Upload a photo with exactly one face.",
         )
 
     encodings = face_recognition.face_encodings(image, face_locations)
     if not encodings:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not compute face encoding from the image.",
+            detail="Face detected but encoding could not be computed. Try a clearer photo.",
         )
 
     return encodings[0].tolist()
@@ -94,17 +110,7 @@ async def save_encoding(
     encoding: List[float],
     image_path: Optional[str] = None,
 ) -> FaceEncoding:
-    """Save a face encoding to the database.
-
-    Args:
-        db: Database session.
-        user_id: Owner user UUID.
-        encoding: 128-dimensional encoding vector.
-        image_path: Optional path to source image.
-
-    Returns:
-        FaceEncoding model instance.
-    """
+    """Persist a face encoding row linked to a user."""
     face_enc = FaceEncoding(
         user_id=user_id,
         encoding=json.dumps(encoding),
@@ -121,34 +127,35 @@ async def recognize_face(
     image_bytes: bytes,
     tolerance: float = 0.6,
 ) -> FaceRecognizeResponse:
-    """Recognize a face from an image against all stored encodings.
+    """Match a face from an image against all stored encodings.
 
-    Args:
-        db: Database session.
-        image_bytes: Raw image file bytes.
-        tolerance: Face distance threshold (default 0.6).
-
-    Returns:
-        FaceRecognizeResponse with recognition result.
-
-    Raises:
-        HTTPException 400: If face detection fails on input.
+    Returns the best match if euclidean distance ≤ tolerance.
+    confidence = 1 - distance  (range 0-1, higher is better).
     """
     face_recognition = _get_face_recognition()
     np = _get_numpy()
-    image = face_recognition.load_image_file(image_bytes)
+
+    try:
+        image = face_recognition.load_image_file(io.BytesIO(image_bytes))
+    except Exception:
+        return FaceRecognizeResponse(
+            recognized=False,
+            message="Invalid image file",
+            threshold=tolerance,
+        )
+
     face_locations = face_recognition.face_locations(image)
 
     if len(face_locations) == 0:
         return FaceRecognizeResponse(
             recognized=False,
-            message="Aucun visage détecté dans l'image",
+            message="No face detected in the image",
             threshold=tolerance,
         )
     if len(face_locations) > 1:
         return FaceRecognizeResponse(
             recognized=False,
-            message="Plusieurs visages détectés",
+            message=f"{len(face_locations)} faces detected — present only one face",
             threshold=tolerance,
         )
 
@@ -156,61 +163,65 @@ async def recognize_face(
     if not input_encodings:
         return FaceRecognizeResponse(
             recognized=False,
-            message="Impossible de calculer l'encodage facial",
+            message="Could not compute face encoding",
             threshold=tolerance,
         )
 
     input_encoding = np.array(input_encodings[0])
 
-    result = await db.execute(select(FaceEncoding))
-    stored_encodings = result.scalars().all()
+    # Fetch all active encodings with their users (joinedload prevents async lazy-load errors)
+    result = await db.execute(
+        select(FaceEncoding)
+        .options(joinedload(FaceEncoding.user))
+        .where(FaceEncoding.deleted_at.is_(None))
+    )
+    stored = result.scalars().all()
 
-    if not stored_encodings:
+    if not stored:
         return FaceRecognizeResponse(
             recognized=False,
-            message="Aucun encodage de référence en base de données",
+            message="No reference encodings in database",
             threshold=tolerance,
         )
 
-    known_encodings = []
-    known_user_map = {}
+    # Build parallel lists so skipped rows don't shift indices
+    known_vectors: List = []
+    valid_encodings: List[FaceEncoding] = []
 
-    for se in stored_encodings:
+    for fe in stored:
         try:
-            enc_data = json.loads(se.encoding)
-            known_encodings.append(np.array(enc_data))
-            known_user_map[se.user_id] = se.user
+            vec = np.array(json.loads(fe.encoding))
+            known_vectors.append(vec)
+            valid_encodings.append(fe)
         except (json.JSONDecodeError, ValueError) as exc:
-            logger.warning("Invalid encoding data for %s: %s", se.id, exc)
-            continue
+            logger.warning("Skipping corrupt encoding %s: %s", fe.id, exc)
 
-    if not known_encodings:
+    if not known_vectors:
         return FaceRecognizeResponse(
             recognized=False,
-            message="Aucun encodage valide trouvé",
+            message="No valid encodings found",
             threshold=tolerance,
         )
 
-    distances = face_recognition.face_distance(known_encodings, input_encoding)
+    distances = face_recognition.face_distance(known_vectors, input_encoding)
     min_distance = float(np.min(distances))
-    best_match_idx = int(np.argmin(distances))
+    best_idx = int(np.argmin(distances))
 
     if min_distance <= tolerance:
-        matched_user_id = stored_encodings[best_match_idx].user_id
-        matched_user = known_user_map.get(matched_user_id)
-        confidence = 1.0 - min_distance
+        matched = valid_encodings[best_idx]
+        matched_user = matched.user
         return FaceRecognizeResponse(
             recognized=True,
-            user_id=matched_user_id,
+            user_id=matched.user_id,
             user_name=matched_user.full_name if matched_user else "Unknown",
-            confidence=round(confidence, 4),
+            confidence=round(1.0 - min_distance, 4),
             threshold=tolerance,
-            message="Visage reconnu",
+            message="Face recognized",
         )
 
     return FaceRecognizeResponse(
         recognized=False,
-        message="Visage non identifié",
+        message="Face not recognized",
         threshold=tolerance,
     )
 
@@ -218,17 +229,11 @@ async def recognize_face(
 async def get_user_encodings(
     db: AsyncSession, user_id: str
 ) -> FaceEncodingListResponse:
-    """Get all face encodings for a specific user.
-
-    Args:
-        db: Database session.
-        user_id: User UUID.
-
-    Returns:
-        FaceEncodingListResponse with encoding list.
-    """
+    """Return all active (non-deleted) encodings for a user."""
     result = await db.execute(
-        select(FaceEncoding).where(FaceEncoding.user_id == user_id).order_by(FaceEncoding.created_at.desc())
+        select(FaceEncoding)
+        .where(FaceEncoding.user_id == user_id, FaceEncoding.deleted_at.is_(None))
+        .order_by(FaceEncoding.created_at.desc())
     )
     encodings = result.scalars().all()
     return FaceEncodingListResponse(
@@ -238,21 +243,24 @@ async def get_user_encodings(
 
 
 async def delete_encoding(db: AsyncSession, encoding_id: str) -> None:
-    """Delete a face encoding by ID.
-
-    Args:
-        db: Database session.
-        encoding_id: Encoding UUID.
+    """Soft-delete a face encoding by ID.
 
     Raises:
-        HTTPException 404: If encoding not found.
+        HTTPException 404: If encoding not found or already deleted.
     """
-    result = await db.execute(select(FaceEncoding).where(FaceEncoding.id == encoding_id))
+    from datetime import datetime, timezone
+
+    result = await db.execute(
+        select(FaceEncoding).where(
+            FaceEncoding.id == encoding_id,
+            FaceEncoding.deleted_at.is_(None),
+        )
+    )
     encoding = result.scalar_one_or_none()
     if not encoding:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Face encoding not found",
         )
-    await db.delete(encoding)
+    encoding.deleted_at = datetime.now(timezone.utc)
     await db.flush()

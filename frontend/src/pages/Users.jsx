@@ -45,8 +45,8 @@ const Users = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-800">Utilisateurs</h1>
-        <Button onClick={() => setShowModal(true)}>+ Nouvel utilisateur</Button>
+        <h1 className="text-2xl font-bold text-gray-800">Employés</h1>
+        <Button onClick={() => setShowModal(true)}>+ Nouvel employé</Button>
       </div>
 
       <div className="flex gap-4">
@@ -80,7 +80,7 @@ const Users = () => {
               {users.map((user) => (
                 <tr key={user.id} className="border-b last:border-0 hover:bg-gray-50">
                   <td className="px-6 py-4 font-medium text-gray-800">
-                    <Link to={`/users/${user.id}`} className="text-primary-600 hover:underline">
+                    <Link to={`/employees/${user.id}`} className="text-primary-600 hover:underline">
                       {user.full_name}
                     </Link>
                   </td>
@@ -98,7 +98,7 @@ const Users = () => {
                   </td>
                   <td className="px-6 py-4">
                     <Link
-                      to={`/users/${user.id}`}
+                      to={`/employees/${user.id}`}
                       className="text-primary-600 hover:underline text-sm"
                     >
                       Voir
@@ -142,7 +142,7 @@ const Users = () => {
         </div>
       )}
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Nouvel utilisateur">
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Nouvel employé">
         <UserForm onSuccess={handleCreated} onCancel={() => setShowModal(false)} />
       </Modal>
     </div>

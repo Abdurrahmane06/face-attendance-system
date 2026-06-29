@@ -1,8 +1,9 @@
 version: "3.9"
 
 services:
-  postgres:
-    image: postgres:15
+  # ── PostgreSQL 15 ─────────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
     container_name: faceattend-db
     restart: unless-stopped
     ports:
@@ -20,28 +21,31 @@ services:
       retries: 5
       start_period: 30s
 
-  api:
+  # ── FastAPI Backend ────────────────────────────────────────────────────────
+  backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: faceattend-api
+    container_name: faceattend-backend
     restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-faceattend}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-faceattend}
+      # Overrides DATABASE_URL from .env to use the Docker hostname "db"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-faceattend}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-faceattend}
       ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
     volumes:
       - ./backend:/app
       - uploads-data:/app/uploads
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
     command: >
       sh -c "alembic upgrade head && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
 
+  # ── React + Vite Frontend ──────────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -50,17 +54,19 @@ services:
     restart: unless-stopped
     ports:
       - "5173:5173"
-    env_file:
-      - .env
+    environment:
+      VITE_API_URL: http://localhost:8000/api/v1
+      VITE_APP_TITLE: FaceAttend
     volumes:
       - ./frontend:/app
       - /app/node_modules
     depends_on:
-      - api
+      - backend
     command: npm run dev -- --host 0.0.0.0
 
+  # ── PgAdmin ───────────────────────────────────────────────────────────────
   pgadmin:
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:latest
     container_name: faceattend-pgadmin
     restart: unless-stopped
     ports:
@@ -71,7 +77,8 @@ services:
     volumes:
       - pgadmin-data:/var/lib/pgadmin
     depends_on:
-      - postgres
+      db:
+        condition: service_healthy
 
 volumes:
   postgres-data:

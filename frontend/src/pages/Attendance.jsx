@@ -63,9 +63,9 @@ const Attendance = () => {
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-primary-500 focus:border-primary-500"
           >
             <option value="">Tous</option>
-            <option value="PRESENT">Présent</option>
-            <option value="LATE">Retard</option>
-            <option value="ABSENT">Absent</option>
+            <option value="present">Présent</option>
+            <option value="late">Retard</option>
+            <option value="absent">Absent</option>
           </select>
         </div>
       </div>

@@ -1,54 +1,40 @@
-"""Authentication request/response schemas."""
+"""Authentication request / response schemas."""
 
-from datetime import datetime
-
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field
 
 
 class RegisterRequest(BaseModel):
-    """User registration request body.
+    """Public user registration — always creates a USER-role account.
 
-    Attributes:
-        email: User email address.
-        full_name: User display name.
-        password: Plaintext password (min 8 chars).
-        role: Optional role (default USER).
+    Admins are created via POST /api/v1/users (admin-only) or the seed endpoint.
     """
 
     email: EmailStr
     full_name: str = Field(..., min_length=1, max_length=255)
     password: str = Field(..., min_length=8, max_length=128)
-    role: str = Field(default="USER")
 
-    @field_validator("role")
-    @classmethod
-    def validate_role(cls, v: str) -> str:
-        """Ensure role is valid."""
-        if v.upper() not in ("ADMIN", "USER"):
-            raise ValueError("Role must be ADMIN or USER")
-        return v.upper()
+
+class SeedAdminRequest(BaseModel):
+    """First-admin bootstrap request.
+
+    Only succeeds when no ADMIN exists in the database yet.
+    Defaults are provided so the endpoint works without a body in dev.
+    """
+
+    email: EmailStr = "admin@faceattend.local"
+    full_name: str = Field(default="Administrateur", min_length=1, max_length=255)
+    password: str = Field(default="Admin@1234!", min_length=8, max_length=128)
 
 
 class LoginRequest(BaseModel):
-    """User login request body.
-
-    Attributes:
-        email: User email address.
-        password: Plaintext password.
-    """
+    """User login credentials."""
 
     email: EmailStr
     password: str = Field(..., min_length=1)
 
 
 class TokenResponse(BaseModel):
-    """JWT token response.
-
-    Attributes:
-        access_token: JWT access token.
-        refresh_token: JWT refresh token.
-        token_type: Token type (bearer).
-    """
+    """JWT token pair."""
 
     access_token: str
     refresh_token: str
@@ -56,26 +42,13 @@ class TokenResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    """Token refresh request body.
-
-    Attributes:
-        refresh_token: Valid refresh token string.
-    """
+    """Refresh-token payload for /auth/refresh and /auth/logout."""
 
     refresh_token: str
 
 
 class UserInfo(BaseModel):
-    """Public user information returned with auth responses.
-
-    Attributes:
-        id: User UUID.
-        email: User email.
-        full_name: User display name.
-        role: User role.
-        department: Optional department.
-        is_active: Account active flag.
-    """
+    """Public user info returned with auth responses."""
 
     id: str
     email: str
@@ -84,17 +57,11 @@ class UserInfo(BaseModel):
     department: str | None = None
     is_active: bool
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class AuthResponse(BaseModel):
-    """Authentication response including tokens and user info.
-
-    Attributes:
-        data: TokenResponse with access/refresh tokens.
-        user: UserInfo for the authenticated user.
-    """
+    """Combined auth response: tokens + user profile."""
 
     data: TokenResponse
     user: UserInfo

@@ -31,7 +31,7 @@ const Register = () => {
     setLoading(true);
     try {
       await register(form.email, form.fullName, form.password);
-      navigate('/dashboard');
+      navigate('/');
     } catch (err) {
       setError(err.response?.data?.detail || "Échec de l'inscription");
     } finally {

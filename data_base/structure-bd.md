@@ -290,7 +290,7 @@ erDiagram
     EMPLOYEE ||--o{ ATTENDANCE : "pointe"
     EMPLOYEE ||--o{ JUSTIFICATION : "justifie"
     ABSENCE_TYPE ||--o{ JUSTIFICATION : "categorise"
-    ATTENDANCE o--|| JUSTIFICATION : "lie a"
+    ATTENDANCE |o--{| JUSTIFICATION : "lie a"
 
     PROFILE {
         uuid id PK

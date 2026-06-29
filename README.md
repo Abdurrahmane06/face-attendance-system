@@ -100,7 +100,7 @@ L'ordre de démarrage est automatique :
 ```bash
 curl -X POST http://localhost:8000/api/v1/auth/seed-admin \
   -H "Content-Type: application/json" \
-  -d '{"email": "admin@faceattend.local", "password": "Admin@1234!", "full_name": "Administrateur"}'
+  -d '{"email": "admin@faceattend.com", "password": "Admin@1234!", "full_name": "Administrateur"}'
 ```
 
 Cet endpoint échoue si un admin existe déjà (protection idempotente).
@@ -139,7 +139,7 @@ Toutes les variables sont dans le fichier `.env` racine (chargé par docker-comp
 | `ALLOWED_ORIGINS` | `http://localhost:5173,...` | CORS origins autorisées |
 | `ENVIRONMENT` | `development` | `development` ou `production` |
 | `LOG_LEVEL` | `INFO` | Niveau de log Python |
-| `PGADMIN_EMAIL` | `admin@faceattend.local` | Email de connexion PgAdmin |
+| `PGADMIN_EMAIL` | `admin@faceattend.io` | Email de connexion PgAdmin |
 | `PGADMIN_PASSWORD` | *(obligatoire)* | Mot de passe PgAdmin |
 
 ---
@@ -149,7 +149,6 @@ Toutes les variables sont dans le fichier `.env` racine (chargé par docker-comp
 | Route | Accès | Description |
 |-------|-------|-------------|
 | `/login` | Public | Connexion email + mot de passe |
-| `/register` | Public | Inscription (rôle USER automatique) |
 | `/pointage` | Tout utilisateur auth. | Webcam → reconnaissance → Entrée / Sortie |
 | `/dashboard` | Admin | KPIs, graphiques, derniers pointages |
 | `/employees` | Admin | Liste des employés, création, encodage facial |
@@ -165,7 +164,7 @@ Toutes les variables sont dans le fichier `.env` racine (chargé par docker-comp
 
 | Méthode | Endpoint | Accès | Description |
 |---------|----------|-------|-------------|
-| `POST` | `/api/v1/auth/register` | Public | Inscription (rôle USER) |
+| `POST` | `/api/v1/auth/register` | Admin | Créer un compte USER (réservé aux admins) |
 | `POST` | `/api/v1/auth/login` | Public | Connexion → tokens JWT |
 | `POST` | `/api/v1/auth/refresh` | Public | Renouveler l'access token |
 | `POST` | `/api/v1/auth/logout` | Auth | Révoquer le refresh token |
